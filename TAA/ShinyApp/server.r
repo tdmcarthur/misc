@@ -5,11 +5,10 @@
 library(shiny)
 library(ggplot2)
 library(MASS)
-library(rCharts)
 
 
-#  historical.df<-read.csv("~/ShinyApps/ShinyApp/HistoricalWageData.csv")
-historical.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/HistoricalWageData.csv")
+ historical.df<-read.csv("~/ShinyApps/ShinyApp/HistoricalWageData.csv")
+
 
 
 
@@ -150,30 +149,31 @@ shinyServer(function(input, output) {
   
 
   
-    output$distPlot <- renderPlot({
-
-    # generate an rnorm distribution and plot it
-    dist <- mvrnorm(n = input$obs, mu=c(0,0), Sigma=matrix(c(10,as.numeric(input$correlation)*10,as.numeric(input$correlation)*10,10),2,2))
-    plot(dist, main="More cool graphs", col="red", ylab="Betterness", xlab="Grad student pay", cex.lab=1.5,asp=1)
-  }, width=400, height=400)
-  
-      output$rchartsPlot <- renderChart({
-
-        data(economics, package = "ggplot2")
-        econ <- transform(economics, date = as.character(date))
-        m1 <- mPlot(x = "date", y = c("psavert", "uempmed"), type = "Line", data = econ)
-        m1$set(pointSize = 0, lineWidth = 1)
-#        m1$print("chart2")
-        m1$addParams(dom = 'rchartsPlot')
-        return(m1)
-        
-  })
+#     output$distPlot <- renderPlot({
+# 
+#     # generate an rnorm distribution and plot it
+#     dist <- mvrnorm(n = input$obs, mu=c(0,0), Sigma=matrix(c(10,as.numeric(input$correlation)*10,as.numeric(input$correlation)*10,10),2,2))
+#     plot(dist, main="More cool graphs", col="red", ylab="Betterness", xlab="Grad student pay", cex.lab=1.5,asp=1)
+#   }, width=400, height=400)
+#   
+#       output$rchartsPlot <- renderChart({
+# 
+#         data(economics, package = "ggplot2")
+#         econ <- transform(economics, date = as.character(date))
+#         m1 <- mPlot(x = "date", y = c("psavert", "uempmed"), type = "Line", data = econ)
+#         m1$set(pointSize = 0, lineWidth = 1)
+# #        m1$print("chart2")
+#         m1$addParams(dom = 'rchartsPlot')
+#         return(m1)
+#         
+#   })
   
 #  peers.df<-data.frame(school=c("UW", "really long nameeeeeeeeee", letters[1:9]), pay=runif(11), deflator=runif(11), fees=runif(11)/10, stringsAsFactors=FALSE)
   
   
-#  peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
-  peers.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/PeerData.csv")
+  peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
+ 
+  
 
   
   
@@ -243,12 +243,12 @@ shinyServer(function(input, output) {
   discrete.lines <- data.frame(vals=1:max(ceiling(expenses.df$values)))
   expenses.df$offset <- -1
 
-  aaa <- ggplot(expenses.df, aes(x=categories, y=values)) +
-    geom_bar(stat="identity", fill=factor(1:4)) +
+  aaa <- ggplot(expenses.df, aes(x=categories, y=values, fill=categories)) +
+    geom_bar(stat="identity") +
       geom_hline(data=discrete.lines, aes(yintercept=vals), colour="white") +
       geom_text(aes(label = round(values, digits=1), vjust=offset)) +
       ggtitle("Seg fees consume months of grad student expenses") +
-        opts(axis.title.x = theme_blank(),axis.title.y = theme_blank())
+        opts(axis.title.x = theme_blank(),axis.title.y = theme_blank(), legend.position="none")
         #, position=data.frame(h=1,w=0))
   
   print(aaa)
