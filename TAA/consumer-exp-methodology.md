@@ -1,4 +1,4 @@
-*Methodology for grad student expenses*
+**Methodology for grad student expenses**
  
 The public-use microdata from the Interview version of the Consumer Expenditure Survey (http://www.bls.gov/cex/pumdhome.htm) was downloaded for years 2010-2012. Consumer units with the following characteristics were downloaded:
 - Annual income between $5,000 and $20,000.
