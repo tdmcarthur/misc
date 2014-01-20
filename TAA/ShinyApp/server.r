@@ -8,8 +8,8 @@ library(MASS)
 library(rCharts)
 
 
-  historical.df<-read.csv("~/ShinyApps/ShinyApp/HistoricalWageData.csv")
-
+#  historical.df<-read.csv("~/ShinyApps/ShinyApp/HistoricalWageData.csv")
+historical.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/HistoricalWageData.csv")
 
 
 
@@ -111,19 +111,19 @@ shinyServer(function(input, output) {
     
       end.plot<-ggplot( data=data.frame(x=2002:input$end.year, y=take.home.series.f(), z=take.home.series.no.seg.f(), expl=expl, expl.no.fee=expl.no.fee), 
       aes(x=x, y=y, z=z), xlab="", ylab="" )  +  # , group=x>2013
-        geom_line(aes(x=x, y=y, colour = expl)) + 
-        geom_line(aes(x=x, y=z, colour = expl.no.fee)) +
-        geom_point(aes(x=x, y = y)) + 
-        geom_point(aes(x=x, y = z)) +
+        geom_line(aes(x=x, y=y, colour = expl), size=2) +  
+        geom_line(aes(x=x, y=z, colour = expl.no.fee), size=2) +
+        geom_point(aes(x=x, y = y), size=2) + 
+        geom_point(aes(x=x, y = z), size=2) +
         xlab("") +
         ylab("") +
-        ggtitle("Real take-home pay per semester (2013 dollars)") +
+        ggtitle("Grad student real take-home pay per semester (2013 dollars)") +
         scale_y_continuous(limits=c(ylim.render), breaks=ticks, labels=paste0("$", labels)) +
         theme(legend.title=element_blank(), legend.position="top") +
         scale_colour_discrete(name  ="",   breaks=c("green", "red", "orange",  "blue", "seg.line" ), labels=c("Gross pay", "Pay minus seg fees", "Full seg fee offset (projection)", "No action (projection)", "Seg Fees"  )) 
 
     if ( input$seg.line ) {
-      end.plot <- end.plot + geom_line(aes(x=x, y=z-y, colour ="seg.line")) + geom_point(aes(x=x, y = z-y)) 
+      end.plot <- end.plot + geom_line(aes(x=x, y=z-y, colour ="seg.line", size=2)) + geom_point(aes(x=x, y = z-y), size=2) 
     }
   
     print( end.plot )
@@ -172,7 +172,8 @@ shinyServer(function(input, output) {
 #  peers.df<-data.frame(school=c("UW", "really long nameeeeeeeeee", letters[1:9]), pay=runif(11), deflator=runif(11), fees=runif(11)/10, stringsAsFactors=FALSE)
   
   
-  peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
+#  peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
+  peers.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/PeerData.csv")
 
   
   
@@ -217,7 +218,7 @@ shinyServer(function(input, output) {
      
      a <- ggplot(df, 
        aes(x = school, y = peer.pay.display)) + 
-     labs(title = "Earnings comparison CAUTION: Fake data!", x = NULL, y = NULL, fill = NULL)
+     labs(title = "Teaching assistant earnings comparison with UW peers", x = NULL, y = NULL, fill = NULL)
      if (input$PeerBarplot) {b <- a + geom_bar(stat="identity", fill=ifelse(df$school[order(df$peer.pay.display)]=="UW-Madison", "red", "black")) + coord_flip() + scale_y_continuous(limits=ylim.render, breaks=ticks, labels=paste0("$", labels))
      } else {
      b <- a +  geom_point(stat="identity", size=7, colour=ifelse(df$school=="UW-Madison", "red", "black"))  + coord_flip() + scale_y_continuous(limits=ylim.render, breaks=ticks, labels=paste0("$", labels))
@@ -232,6 +233,26 @@ shinyServer(function(input, output) {
   # ifelse(school=="UW", "red", "black")
   
   # ifelse(peers.df$school[order(peer.pay.display())][(!input$PeerGroup=="big10" | peers.df$big10) & (!input$PeerGroup=="salaryPeers" | peers.df$salary.peer) ]=="UW", "red", "black")
+  
+  output$expensesPlot <- renderPlot({
+  expenses.df <-  
+  data.frame( values=(fee.by.credits.v[min(input$credits2, 8)]*2)/c(input$housing, input$groceries, input$clothing, input$transportation),
+  categories=factor(c("Months of Housing", "Months of Groceries", "Months of Clothing", "Months of Transportation"), levels = c("Months of Housing", "Months of Groceries", "Months of Clothing", "Months of Transportation")) )
+  
+    
+  discrete.lines <- data.frame(vals=1:max(ceiling(expenses.df$values)))
+  expenses.df$offset <- -1
+
+  aaa <- ggplot(expenses.df, aes(x=categories, y=values)) +
+    geom_bar(stat="identity", fill=factor(1:4)) +
+      geom_hline(data=discrete.lines, aes(yintercept=vals), colour="white") +
+      geom_text(aes(label = round(values, digits=1), vjust=offset)) +
+      ggtitle("Seg fees consume months of grad student expenses") +
+        opts(axis.title.x = theme_blank(),axis.title.y = theme_blank())
+        #, position=data.frame(h=1,w=0))
+  
+  print(aaa)
+  })
   
 
 })

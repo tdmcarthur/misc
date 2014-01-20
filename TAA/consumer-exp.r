@@ -1,6 +1,6 @@
 
 
-
+# http://www.bls.gov/cex/pumdhome.htm
 library(plyr)
 library(foreign)
 
@@ -8,7 +8,7 @@ library(foreign)
 
 i <- interview.round[cohort]
 
-c(paste0(year, 2:4), paste0(year+1, 1))
+# c(paste0(year, 2:4), paste0(year+1, 1))
 
 interview.round <- c( paste0( rep(10:12, each=5), c(1, "1x", 2:4) )[-1], "131")
 
@@ -31,7 +31,7 @@ if (substr(interview.round[cohort], 3, 4)=="1"  & cohort!=1) {
 
 c.exp.ids <- c.exp.for.ids.df[
   c.exp.for.ids.df$inclass %in% c("02", "03", "04") & 
-  rowMeans(c.exp.for.ids.df[, c("age_ref", "age2")], na.rm = TRUE) <= 35 & 
+  rowMeans(c.exp.for.ids.df[, c("age_ref", "age2")], na.rm = TRUE) <= 40 & 
   rowMeans(c.exp.for.ids.df[, c("age_ref", "age2")], na.rm = TRUE) >= 22 &
   apply(c.exp.for.ids.df[, c("educ_ref", "educa2")], 1, FUN=function(x) max(as.numeric(x), na.rm=TRUE))  %in% 15:16 & 
   substr(x=c.exp.for.ids.df$newid, start=7, stop=7)==2
@@ -75,8 +75,6 @@ c.exp.df$trans <- rowSums(c.exp.df[, c("transcq", "transpq")])
 
 master.list[[cohort]] <- c.exp.df
 
-# TODO: need to do something about the x years, maybe
-
 }
 
 
@@ -90,8 +88,8 @@ medians.df <- apply(master.df, 2, FUN=median)
 
 
 median.CIs.df<-apply(master.df, 2, FUN=function(x) {
-  bootmed <-apply(matrix(sample(x,rep=TRUE,10^4*length(x)),nrow=10^4),1,median)
-  quantile(bootmed,c(.05,0.95))
+  bootmed <- apply(matrix(sample(x,rep=TRUE,10^5*length(x)),nrow=10^5),1,median)
+  quantile(bootmed, c(.05,0.95))
   }
 )
 # Thanks to http://stats.stackexchange.com/questions/21103/confidence-interval-for-median
@@ -103,6 +101,11 @@ medians.df<-rbind(median.CIs.df[1, , drop=FALSE],
 barplot(medians.df, beside=TRUE)
 
 medians.df
+
+
+# Alterantive confidence intervals:
+# apply(master.df, 2, FUN=function(x) wilcox.test(x, conf.int=TRUE, conf.level=.90)$conf.int)
+# However, according to this, it is no good: http://r.789695.n4.nabble.com/Simple-95-confidence-interval-for-a-median-td3517769.html
 
 
 
@@ -120,6 +123,6 @@ medians.df
 
 # "Demographic characteristics, such as family size, refer to the CU status on the date of the interview. Demographic characteristic information may change between interviews if, for example, a member enters or leaves the CU. Income variables contain annual values. Income data are collected in the second and fifth interviews only and cover the 12 months prior to the date of interview. Income data collected in the second interview are copied to the third and fourth interviews. Income data are updated only if a CU member over 13 is new to the CU or has not worked in previous interviews and has now started working."
 
-
+# http://stackoverflow.com/questions/3357743/replacing-character-values-with-na-in-a-data-frame?rq=1
 
 
