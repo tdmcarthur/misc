@@ -6,7 +6,8 @@ The public-use microdata from the Interview version of the Consumer Expenditure 
 - Highest education obtained: Bachelor's or Master's degree
 
 With this subsample, the medians of the following variables were then calculated:
-houscq, fdhomecq, apparcq, transcq
+houscq, fdhomecq, apparcq, transcq.
+
 These represent housing, grocery, clothing, and transportation expenses, respectively.
 
 For the code that computes these values, go here:

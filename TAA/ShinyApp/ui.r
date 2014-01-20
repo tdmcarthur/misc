@@ -52,12 +52,13 @@ shinyUI(pageWithSidebar(
       checkboxInput("seg.line", "Show seg fees", FALSE),
     
     
-      helpText(HTML('<br> The base wage in 2013 is 0.5 * $29,492 * (appointment %).
-0.5 is because this is for one semester, and $29,492 is from the <a href=\"http://www.ohr.wisc.edu/polproced/utg/SalRng.html#stuasst\">TA appointment salary</a>.
+      helpText(HTML('<br>Learn more about the campaign <a href=\"http://faceoffees.tumblr.com/\">here</a>.<br> <br>
+The base wage in 2013 is 0.5 * $29,492 * (appointment %). The $29,492 is from the <a href=\"http://www.ohr.wisc.edu/polproced/utg/SalRng.html#stuasst\">TA appointment salary</a> and 
+0.5 is because this graph displays pay for one semester.
 <br>
 <br>
 
-\"Full seg fee offset\" means that we do not pay seg fees now or ever. The \"No action\" line subtracts seg fees from our wages, now and into the future. The projections are in constant 2013 dollars, so the purchasing power of our wages declines with inflation, which the user can set at different rates.'))
+\"Full seg fee offset\" means that we do not pay seg fees now or ever. The \"No action\" line subtracts seg fees from our wages, now and into the future. The projections are in constant 2013 dollars, so the purchasing power of our wages declines with inflation, which you can set at different rates. '))
 
     ), 
     
@@ -91,7 +92,7 @@ shinyUI(pageWithSidebar(
           
           numericInput("credits2", "Number of academic credits per semester:", 8),
           
-          helpText(HTML('<br> This graph shows the numbers of months of various expenses that grad students could pay for if they did not have to pay seg fees. The default values ($899, $249, $65, $282, respectively) are based on Consumer Expenditure Survey responses of people with characteristics similar to graduate students at UW. See <a href=\"some link\">here</a> for methodological details. You can input your own monthly expenses to calculate your seg fee burden, too. Seg fees are based on credit load, and include both fall and spring semesters.'))
+          helpText(HTML('<br> This graph shows the number of months of various expenses that grad students could pay for if they did not have to pay seg fees. The default values ($899, $249, $65, $282, respectively) are based on Consumer Expenditure Survey responses of people with characteristics similar to graduate students at UW. See <a href=\"https://github.com/tdmcarthur/misc/blob/master/TAA/consumer-exp-methodology.md\">here</a> for methodological details. You can input your own monthly expenses to calculate your seg fee burden, too. Seg fees are based on credit load, and include both fall and spring semesters.'))
 
     
     
@@ -122,7 +123,7 @@ shinyUI(pageWithSidebar(
       
       checkboxInput("PeerBarplot", "Barplot instead", FALSE),
       
-      helpText(HTML('<br>Low grad student pay means UW has a harder time attracting the best students when they have better financial offers from elsewhere.<br><br>The Big 10 are our sports rivals. The <a href=\"http://apir.wisc.edu/compensation/FacultySalaryComparison201213.pdf\">faculty salary peer group</a> was defined by the Governor\'s Commission on Faculty Compensation in 1984. The two groups overlap a lot. A few schools were excluded due to data unavailability. Fee totals assume a full course load and reflects any fee remission. '))
+      helpText(HTML('<br>Low grad student pay means UW has a harder time attracting the best students when they have better financial offers from elsewhere.<br><br>The Big 10 are our sports rivals. The <a href=\"http://apir.wisc.edu/compensation/FacultySalaryComparison201213.pdf\">faculty salary peer group</a> was defined by the Governor\'s Commission on Faculty Compensation in 1984. The two groups overlap a lot. A few schools were excluded due to data unavailability. Fee totals assume a full course load and reflects any fee remission. Pay and fee data <a href=\"https://docs.google.com/spreadsheet/ccc?key=0Auc_uGiCHm2TdDYwdkJhT2FBd2wzbFA2Q3U2VkFRd0E\">here</a>. Cost of living data from the Council for Community and Economic Research.'))
       
       
       
