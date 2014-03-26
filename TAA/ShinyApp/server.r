@@ -13,6 +13,7 @@ library(MASS)
 
 
 
+
   
   historical.df$full.time.wage <- historical.df$full.time.wage * (historical.df$midwest.cpi[historical.df$year==2013]/historical.df$midwest.cpi)
 
@@ -29,9 +30,50 @@ library(MASS)
     501.36,
     565.04)
   
+rec.sports.increase <- c(0,
+0,
+0,
+8,
+8,
+8,
+97,
+97,
+102,
+102,
+102,
+102,
+102,
+102,
+102,
+102,
+102,
+102,
+102,
+102,
+102)
 
 # Define server logic required to plot various variables against mpg
-shinyServer(function(input, output) {
+shinyServer(function(input, output, session) {
+  
+#    splashTimer <- reactiveTimer(10000, session)
+ 
+#  observe({
+    # Invalidate and re-execute this reactive expression every time the
+    # timer fires.
+#    splashTimer()
+    # Do something each time this is invalidated.
+    # The isolate() makes this observer _not_ get invalidated and re-executed
+    # when input$n changes.
+#  })
+  
+  
+ # output$splashplot <- renderUI({FALSE})
+  
+#  output$splashplot <- renderUI({
+#    splashTimer()
+#    TRUE
+#  })
+  
   
   
   fee.base <-  reactive( fee.by.credits.v[min(input$credits, 8)] )
@@ -39,8 +81,15 @@ shinyServer(function(input, output) {
   hist.seg.fee <- reactive( historical.df$seg.fee * fee.base()/max(fee.by.credits.v) )
 
   
-  fee.series <-  reactive( fee.base() * (1 + input$seg.growth/100)^(0:(as.numeric(input$end.year)-2013)) )  
+#  fee.series <-  reactive( fee.base() * (1 + input$seg.growth/100)^(0:(as.numeric(input$end.year)-2013)) ) 
   
+fee.series <-  reactive( if (input$recsports) {
+  (fee.base() + rec.sports.increase[1:(as.numeric(input$end.year)-2012)] * (fee.base()/max(fee.by.credits.v)) ) *
+    (1 + input$seg.growth/100)^(0:(as.numeric(input$end.year)-2013))  
+  } else {
+  fee.base() * (1 + input$seg.growth/100)^(0:(as.numeric(input$end.year)-2013)) 
+  } 
+) 
   
   hist.take.home.series.no.seg <- reactive( (input$appt.pct/100) * historical.df$full.time.wage * (6/12)  )
   
@@ -172,7 +221,7 @@ shinyServer(function(input, output) {
   
   
   peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
- 
+
   
 
   
@@ -240,7 +289,7 @@ shinyServer(function(input, output) {
   categories=factor(c("Months of Housing", "Months of Groceries", "Months of Clothing", "Months of Transportation"), levels = c("Months of Housing", "Months of Groceries", "Months of Clothing", "Months of Transportation")) )
   
     
-  discrete.lines <- data.frame(vals=1:max(ceiling(expenses.df$values)))
+  discrete.lines <- data.frame(vals=1:max(ceiling(expenses.df$values*1.15)))
   expenses.df$offset <- -1
 
   aaa <- ggplot(expenses.df, aes(x=categories, y=values, fill=categories)) +
@@ -248,8 +297,9 @@ shinyServer(function(input, output) {
       geom_hline(data=discrete.lines, aes(yintercept=vals), colour="white") +
       geom_text(aes(label = round(values, digits=1), vjust=offset)) +
       ggtitle("Seg fees consume months of grad student expenses") +
-        opts(axis.title.x = theme_blank(),axis.title.y = theme_blank(), legend.position="none")
-        #, position=data.frame(h=1,w=0))
+        opts(axis.title.x = theme_blank(),axis.title.y = theme_blank(), legend.position="none")  +
+      scale_y_continuous(limits = c(0, max(expenses.df$values)*1.15))
+        #, position=data.frame(h=1,w=0)) #
   
   print(aaa)
   })
