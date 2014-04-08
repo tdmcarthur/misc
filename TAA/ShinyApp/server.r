@@ -11,9 +11,6 @@ library(MASS)
 
 
 
-
-
-
   
   historical.df$full.time.wage <- historical.df$full.time.wage * (historical.df$midwest.cpi[historical.df$year==2013]/historical.df$midwest.cpi)
 
@@ -223,8 +220,6 @@ fee.series <-  reactive( if (input$recsports) {
   peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
 
   
-
-  
   
 #    peer.pay.display<-reactive( ifelse(input$PeerCOLA & input$PeerFees, 
 #      (peers.df$pay-peers.df$fees)/peers.df$deflator,
@@ -242,11 +237,12 @@ fee.series <-  reactive( if (input$recsports) {
 #      ) )
   
         peer.pay.display<-reactive( switch(paste(c(input$PeerCOLA,input$PeerFees), collapse=""), 
-          TRUETRUE = (peers.df$pay-peers.df$fees)/peers.df$deflator,
-          TRUEFALSE = (peers.df$pay)/peers.df$deflator,
-          FALSETRUE = (peers.df$pay-peers.df$fees),
-          FALSEFALSE = peers.df$pay
+          TRUETRUE = (peers.df$pay*(input$appt.pct.peer/100)-peers.df$fees)/peers.df$deflator,
+          TRUEFALSE = (peers.df$pay*(input$appt.pct.peer/100))/peers.df$deflator,
+          FALSETRUE = (peers.df$pay*(input$appt.pct.peer/100)-peers.df$fees),
+          FALSEFALSE = peers.df$pay*(input$appt.pct.peer/100)
         ))
+
 
   
     take.home.series.no.seg.f<-reactive( c(hist.take.home.series.no.seg(), take.home.series.no.seg()) )
@@ -256,7 +252,7 @@ fee.series <-  reactive( if (input$recsports) {
   
    output$competitivenessPlot <- renderPlot({
      
-     df<-data.frame(school=factor(peers.df$school, levels=peers.df$school[order(peer.pay.display())]), peer.pay.display=peer.pay.display()*(input$appt.pct.peer/100))[(!input$PeerGroup=="big10" | peers.df$big10) & (!input$PeerGroup=="salaryPeers" | peers.df$salary.peer), ]
+     df<-data.frame(school=factor(peers.df$school, levels=peers.df$school[order(peer.pay.display())]), peer.pay.display=peer.pay.display())[(!input$PeerGroup=="big10" | peers.df$big10) & (!input$PeerGroup=="salaryPeers" | peers.df$salary.peer), ]
      
      ylim.render <- c(min(min(df$peer.pay.display, 0[input$PeerBarplot])), max(df$peer.pay.display))
      
