@@ -7,9 +7,9 @@ library(ggplot2)
 library(MASS)
 
 
- historical.df<-read.csv("~/ShinyApps/ShinyApp/HistoricalWageData.csv")
+# historical.df<-read.csv("~/ShinyApps/ShinyApp/HistoricalWageData.csv")
 
-
+historical.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/HistoricalWageData.csv")
 
   
   historical.df$full.time.wage <- historical.df$full.time.wage * (historical.df$midwest.cpi[historical.df$year==2013]/historical.df$midwest.cpi)
@@ -217,9 +217,9 @@ fee.series <-  reactive( if (input$recsports) {
 #  peers.df<-data.frame(school=c("UW", "really long nameeeeeeeeee", letters[1:9]), pay=runif(11), deflator=runif(11), fees=runif(11)/10, stringsAsFactors=FALSE)
   
   
-  peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
+#  peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
 
-  
+ peers.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/PeerData.csv") 
   
 #    peer.pay.display<-reactive( ifelse(input$PeerCOLA & input$PeerFees, 
 #      (peers.df$pay-peers.df$fees)/peers.df$deflator,
