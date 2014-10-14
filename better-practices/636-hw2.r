@@ -6,6 +6,7 @@
 ## Preliminaries
 setwd("C:\\Users\\Jared\\Documents\\HW2")
 lapply(c('foreign','MASS'), require, character.only = TRUE)
+# nice use of lapply()
 housedat <- read.dta("house636.dta")
 
 ## Question 1
@@ -46,26 +47,27 @@ plot(housedat$lnprice,housedat$dhws,
 
 ## part F.
 housedat$close <- as.numeric(housedat$dhws<3) 
+# Keeping this as logical would have made more sense, but I know that the
+# assignment says to make it 0-1.
 margin.table(table(housedat[,c('close')]),1)
 
 ## part G.
-housedat.c <- subset(housedat, close==1)
-housedat.nc <- subset(housedat, close==0)
-cor.test(housedat.c$price, housedat.c$dhws)
-cor.test(housedat.nc$price, housedat.nc$dhws)
+cor.test(housedat$price[housedat$close==1], housedat$dhws[housedat$close==1])
+cor.test(housedat$price[housedat$close==0], housedat$dhws[housedat$close==0])
+
+# Or a neater alternative:
+with(housedat[housedat$close==1, ], cor.test(price, dhws) )
+with(housedat[housedat$close==0, ], cor.test(price, dhws) )
+
 
 ## part H.
 
-lm1 <- lm(price~dhws,data = housedat)
-summary(lm1)
-lm2 <- lm(lnprice~dhws, data=housedat)
-summary(lm2)
+# A nice trick to fit things on one line:
+summary(lm1 <- lm(price ~ dhws, data = housedat))
+summary(lm2 <- lm(lnprice ~ dhws, data=housedat))
+
 
 ## part I.
 
-lm2c <- lm(lnprice~dhws,
-            data = subset(housedat,close==1))
-lm2nc <- lm(lnprice~dhws,
-            data = subset(housedat,close==0))
-summary(lm2c)
-summary(lm2nc)
+summary(lm2c <- lm(lnprice ~ dhws, data = housedat[housedat$close==1, ]))
+summary(lm2nc <- lm(lnprice ~ dhws, data = housedat[housedat$close==0, ]))
