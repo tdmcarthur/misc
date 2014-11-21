@@ -9,8 +9,15 @@ lapply(c('foreign','MASS','sandwich','lmtest','car','plm'), require, character.o
 lakedata <- read.dta("IA_long.dta")
 
 clse<-function(model, cluster){
-  require(sandwich, quietly = TRUE)
-  require(lmtest, quietly = TRUE)
+  library(sandwich)
+  library(lmtest)
+  # This is a small point, but library() is preferred to require() within 
+  # functions since it will immediately throw
+  # an error if the package isn't installed. Otherwise, you would get a less interpretable
+  # error message later on when the function tries to use a function that it wasn't 
+  # able to load previously. In general, require() is only useful when you need the
+  # TRUE/FALSE value that it yields, e.g. when you want to automatically install a package
+  # if require() fails. See http://yihui.name/en/2014/07/library-vs-require/
   M <- length(unique(cluster))
   N <- length(cluster)
   K <- model$rank
@@ -19,6 +26,9 @@ clse<-function(model, cluster){
   vcovCL <- dfc*sandwich(model, meat=crossprod(uj)/N)
   return(vcovCL)
 }
+# I'm guessing that you got this code from elsewhere. If not, then great. If so, I
+# generally credit the source somehow, usually just with the URL. This helps
+# me figure out where I got it later on and gives credit where it is due.
 
 # Part a
 descriptives <- function(x) {
@@ -26,7 +36,7 @@ descriptives <- function(x) {
 }
 sapply(lakedata, descriptives)
 gomeanbysite<-aggregate(lakedata$go, by=list(lakedata$site), FUN=mean )
-gomean<- gomeanbysite[with(gomeanbysite, order(-x)), ]
+gomean<- gomeanbysite[with(gomeanbysite, order(x, decreasing = TRUE)), ]
 names(gomean)[1:2] <- c("lake_id","mean_participation")
 head(gomean, n=5)
 
@@ -39,6 +49,11 @@ length(unique(lakedata$site))
 
 # Part c.i
 lpm1 <-lm(data=lakedata, go ~ pr + ltp)
+# This works, but be careful about reversing the order of arguments when one is named 
+# and the other one is not named (here, the formula argument is not named).  This
+# could lead to unintended behavior within another function. What I'm
+# saying is that you are playing with fire, or a least a small candle.
+
 summary(lpm1)
 # B1 is the change in the probability of visiting lake j given $10 increase
 # in the price of traveling.  B2 is the change in the probability given a one percentage
@@ -61,13 +76,19 @@ lakedata$pred <-predict(object= lpm1)
 summary(lakedata$pred) 
 
 # the percentage of observations that were predicted outside the [0,1] interval is
-a<-length(lakedata[which(lakedata$pred<0 | lakedata$pred>1),]$pred)
-b<-length(lakedata$pred)
+a<-sum(lakedata$pred<0 | lakedata$pred>1)
+b<-nrow(lakedata)
 (a/b)*100
+# In practice, which() is rarely needed. The logical vector that was inside which() 
+# can work directly inside subscripting notation without which(). And then I 
+# simplified the expression more, using the automatic conversion of logicals to numerics.
 
 # Averaging predicted values for the given lakes results in:
 predbysite<-aggregate(lakedata$pred, by=list(lake_id=lakedata$site), FUN=mean )
-predbysite<- predbysite[with(predbysite, order(-x)), ]
+predbysite<- predbysite[with(predbysite, order(x, decreasing = TRUE)), ]
+# Just taking the negative of the argument in order() will reverse it, but it's
+# better to use the "decreasing" argument since the negative will not work on 
+# non-numeric vectors.
 predbysite[predbysite$lake_id %in% gomean$lake_id[1:5],]
 names(predbysite)[2] <- "mean_prediction"
 compar <-merge(gomean, predbysite, sort=F)
