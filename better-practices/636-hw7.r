@@ -39,7 +39,7 @@ coeftest(fdm1, vcov=vcovHC(fdm1, type="HC1"))
 
 # Part v.
 exec93 <- murddf[murddf$year==93, c("exec","state")]
-exec93 <- murddf[order(murddf$exec, decreasing = TRUE)), ]
+exec93 <- murddf[order(murddf$exec, decreasing = TRUE), ]
 head(exec93,2)
 exec93[1,1]-exec93[2,1]
 # Generally, don't use head() except to view things.
