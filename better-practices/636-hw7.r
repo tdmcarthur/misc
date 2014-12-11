@@ -25,8 +25,9 @@ haus <-function(m1, m2){
 # to be a symptom.
 
 # Part ii.
-summary(plm1 <-lm(data=murddf[murddf$year!=87,], mrdrte ~ exec + unem))
+summary(plm1 <-lm(mrdrte ~ exec + unem, data=murddf[murddf$year!=87,]))
 # No evidence of deterrent effect.
+# Putting the formula before all other arguments is much more R-like.
 
 # Part iii.
 summary(fdm1 <-plm(data=murddf[murddf$year!=87,],mrdrte~exec+unem, model="fd",index=c("id","year")))
@@ -37,15 +38,15 @@ summary(fdm1 <-plm(data=murddf[murddf$year!=87,],mrdrte~exec+unem, model="fd",in
 coeftest(fdm1, vcov=vcovHC(fdm1, type="HC1"))
 
 # Part v.
-exec93 <- as.data.frame(murddf[murddf$year==93,]$exec);
-exec93$state <-murddf[murddf$year==93,]$state;
-names(exec93)[1] <- "x";
-exec93 <- exec93[with(exec93, order(x, decreasing = TRUE)), ];
+exec93 <- murddf[murddf$year==93, c("exec","state")]
+exec93 <- murddf[order(murddf$exec, decreasing = TRUE)), ]
 head(exec93,2)
-head(exec93,2)[1,1]-head(exec93,2)[2,1]
+exec93[1,1]-exec93[2,1]
+# Generally, don't use head() except to view things.
 
 # Part vi.
-summary(fdm1c <-plm(data=murddf[murddf$year!=87&murddf$state!='TX',],mrdrte~exec+unem, model="fd",index=c("id","year")))
+summary(fdm1c <-plm(data=murddf[murddf$year!=87 & murddf$state!='TX',],mrdrte~exec+unem, model="fd",index=c("id","year")))
+# Separate logical statements with a space. I'm surprised R didn't choke without the spaces
 coeftest(fdm1c, vcov=vcovHC(fdm1c, type="HC1"))
 # Executions are not actually deterring murder, rather the large amount of executions
 # in Texas is biasing the estimator upwards; Texas has likely a lower murder rate
@@ -63,7 +64,10 @@ summary(lm1<-plm(data=airdf,lfare~concen+ldist+ldistsq+factor(year),model="pooli
 # part ii.
 # It is not reliable as pooling requires no autocorrelation which is not likely.
 rstd<-coeftest(lm1, vcov=vcovHC(lm1, type="HC1"))
-conf <-cbind(rstd[,1] - rstd[,2]*1.96,rstd[,1] + rstd[,2]*1.96)
+conf <-cbind(rstd[,"Estimate"] - rstd[,"Std. Error"]*1.96,rstd[,"Estimate"] + rstd[,"Std. Error"]*1.96)
+# It's probably better to get the standard errors by calling theirnames in the coeftest object
+# than by just their numbers, since you may be confused about what you are doing when you read 
+# your code later.
 
 # part iii.
 # Take e(-b2/b3*2)
@@ -92,7 +96,9 @@ mean(freqtb$Freq)
 
 # The question didnt ask this, but if I wanted to display the district number with
 # the most schools would I do this?
-freqtb[which(freqtb == max(freqtb$Freq), arr.ind=T)[1,1],]
+freqtb[which.max(freqtb$Freq), ]
+# This is much easier. Be careful of ties (i.e. multiple observations that are all the max), though.
+# For that, you would do freqtb[which(freqtb$Freq == max(freqtb$Freq)), ]
 
 # part ii.
 elemplm<-plm.data(elemdf, indexes = "distid")
@@ -134,6 +140,8 @@ summary(ivlm)
 summary(lm2)
 # Hausman test by hand (this code is in the vignette for AER.  Is there a better
 # way without using systemfit?)
+# I don't know of a better way without systemfit. Systemfit is not difficult though. It
+# can do single-equation models fine.
 
 haus(ivlm,lm2)
 # The effects are statistically different and post-IV value is larger and still
