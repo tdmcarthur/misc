@@ -9,7 +9,11 @@ library(MASS)
 
 # historical.df<-read.csv("~/ShinyApps/ShinyApp/HistoricalWageData.csv")
 
-historical.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/HistoricalWageData.csv")
+# historical.df<-read.csv("~/ShinyApp/HistoricalWageData.csv")
+ 
+  historical.df<-read.csv("HistoricalWageData.csv")
+
+# historical.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/HistoricalWageData.csv")
 
   
   historical.df$full.time.wage <- historical.df$full.time.wage * (historical.df$midwest.cpi[historical.df$year==2013]/historical.df$midwest.cpi)
@@ -218,8 +222,10 @@ fee.series <-  reactive( if (input$recsports) {
   
   
 #  peers.df<-read.csv("~/ShinyApps/ShinyApp/PeerData.csv")
+#  peers.df<-read.csv("~/ShinyApp/PeerData.csv")
+ peers.df<-read.csv("PeerData.csv")
 
- peers.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/PeerData.csv") 
+# peers.df<-read.csv("/Users/travismcarthur/git/misc/TAA/ShinyApp/PeerData.csv") 
   
 #    peer.pay.display<-reactive( ifelse(input$PeerCOLA & input$PeerFees, 
 #      (peers.df$pay-peers.df$fees)/peers.df$deflator,
@@ -293,7 +299,8 @@ fee.series <-  reactive( if (input$recsports) {
       geom_hline(data=discrete.lines, aes(yintercept=vals), colour="white") +
       geom_text(aes(label = round(values, digits=1), vjust=offset)) +
       ggtitle("Seg fees consume months of grad student expenses") +
-        opts(axis.title.x = theme_blank(),axis.title.y = theme_blank(), legend.position="none")  +
+        theme(axis.title.x = element_blank(),axis.title.y = element_blank(), legend.position="none")  +
+        # Changed opts() to theme() above
       scale_y_continuous(limits = c(0, max(expenses.df$values)*1.15))
         #, position=data.frame(h=1,w=0)) #
   
