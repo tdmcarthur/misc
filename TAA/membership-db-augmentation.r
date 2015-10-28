@@ -1095,7 +1095,10 @@ employment.after.dedup.df$Last.Name.OLD.EM <- employment.after.dedup.df$Last.Nam
 #merge(membership.after.dedup.df[ , c("membership.enrollment.key", "First.Name.MP")], 
 #      enrollment.after.dedup.df[ , c("membership.enrollment.key", "First.Name.EN")])
 
-# Ok, giving names precedence if they are different in the database
+# Ok, giving names precedence if they are different in the database.
+# Among EN-MP matches, MP name has precedence
+# Among EM-MP matches, MP name has precedence
+# Among EM-EN matches, EN names has precedence
 # This syntax below is excessively complicated, but whatevs.
 
 
@@ -1138,6 +1141,14 @@ employment.after.dedup.df$Last.Name.EM[match(
 
 # employment.after.dedup.df
 
+membership.after.dedup.df$is.TAA.member <- TRUE
+employment.after.dedup.df$is.employed <- TRUE
+enrollment.after.dedup.df$is.enrolled <- TRUE
+
+# TODO: Maybe set all NA's to "" to get good with googly
+# And the non-merged NA's (due to all-TRUE above) to FALSE
+
+
 write.csv(employment.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Employment final database.csv", row.names=FALSE, fileEncoding="Latin1")
 
 write.csv(membership.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Membership final database.csv", row.names=FALSE, fileEncoding="Latin1")
@@ -1145,19 +1156,151 @@ write.csv(membership.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA wor
 write.csv(enrollment.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Enrollment final database.csv", row.names=FALSE, fileEncoding="Latin1")
 
 
-table(EMP = membership.after.dedup.df$membership.employment.key!="No Match w Emp", 
-      ENR=membership.after.dedup.df$membership.enrollment.key!="No Match w Enr")
+
+
+
+full.outer.merge.df <- merge(enrollment.after.dedup.df, 
+      merge(employment.after.dedup.df, membership.after.dedup.df, by="membership.employment.key", all=TRUE),
+      by="enrollment.employment.key", all=TRUE ) 
+# Ok, so this last "by=" argument would involve which merge key we have the
+# most confidence in. Choosing enrollment.employment.key for now.
+# Outcome looks like:
+# names(full.outer.merge.df)[grepl("key", names(full.outer.merge.df))]
+# [1] "enrollment.employment.key"   "membership.enrollment.key.x" "membership.employment.key"   "membership.enrollment.key.y"
+# for this reason.
+
+table(full.outer.merge.df$membership.enrollment.key.x==full.outer.merge.df$membership.enrollment.key.y)
+# It appears that there is no inconsistence arising from which direction we go
+# (clockwise or counter-clockwise) around the circle network, since these are all TRUE.
+
+
+
+
+
+
+
+# TODO: Can implement some error test code below.
+# The objective is that the table "matrix" below is completely diagona. All
+# off-diagonal elements should be zero.
+# Otherwise, would have to do more complicated NA checking below
+table(is.na(full.outer.merge.df$Last.Name.EN), is.na(full.outer.merge.df$First.Name.EN))
+table(is.na(full.outer.merge.df$Last.Name.EM), is.na(full.outer.merge.df$First.Name.EM))
+table(is.na(full.outer.merge.df$Last.Name.MP), is.na(full.outer.merge.df$First.Name.MP))
+
+full.outer.merge.df$Name.Master.Key <- NA
+full.outer.merge.df$First.Name.0 <- NA
+full.outer.merge.df$Last.Name.0 <- NA
+# Must do the above because otherwise it will want to paste NA's together
+
+
+# The "precedence" code above should allow the code below to "automatically" respect precedence:
+
+full.outer.merge.df$First.Name.0[!is.na(full.outer.merge.df$First.Name.EM)] <- 
+   gsub("(^ +)|( +$)", "", full.outer.merge.df$First.Name.EM)[!is.na(full.outer.merge.df$First.Name.EM)]
+full.outer.merge.df$Last.Name.0[!is.na(full.outer.merge.df$Last.Name.EM)] <- 
+   gsub("(^ +)|( +$)", "", full.outer.merge.df$Last.Name.EM)[!is.na(full.outer.merge.df$Last.Name.EM)]
+# "(^ +)|( +$)" cuts out any trailing or leading spaces.
+
+full.outer.merge.df$First.Name.0[!is.na(full.outer.merge.df$First.Name.EN)] <- 
+   gsub("(^ +)|( +$)", "", full.outer.merge.df$First.Name.EN)[!is.na(full.outer.merge.df$First.Name.EN)]
+full.outer.merge.df$Last.Name.0[!is.na(full.outer.merge.df$Last.Name.EN)] <- 
+   gsub("(^ +)|( +$)", "", full.outer.merge.df$Last.Name.EN)[!is.na(full.outer.merge.df$Last.Name.EN)]
+
+full.outer.merge.df$First.Name.0[!is.na(full.outer.merge.df$First.Name.MP)] <- 
+   gsub("(^ +)|( +$)", "", full.outer.merge.df$First.Name.MP)[!is.na(full.outer.merge.df$First.Name.MP)]
+full.outer.merge.df$Last.Name.0[!is.na(full.outer.merge.df$Last.Name.MP)] <- 
+   gsub("(^ +)|( +$)", "", full.outer.merge.df$Last.Name.MP)[!is.na(full.outer.merge.df$Last.Name.MP)]
+
+
+
+
+full.outer.merge.df$Name.Master.Key <- paste(full.outer.merge.df$First.Name.0, full.outer.merge.df$Last.Name.0, sep=" ")
+
+table(is.na(full.outer.merge.df$Name.Master.Key))
+table(is.na(full.outer.merge.df$First.Name.0))
+table(is.na(full.outer.merge.df$Last.Name.0))
+# TODO: Error check - should all be false
+
+
+
+full.outer.merge.df$is.TAA.member[is.na(full.outer.merge.df$is.TAA.member)] <- FALSE
+full.outer.merge.df$is.employed[is.na(full.outer.merge.df$is.employed)] <- FALSE
+full.outer.merge.df$is.enrolled[is.na(full.outer.merge.df$is.enrolled)] <- FALSE
+
+full.outer.merge.df <- cbind(full.outer.merge.df[ , c("Name.Master.Key", "Last.Name.0", "First.Name.0"), drop=FALSE], 
+  full.outer.merge.df[, ! colnames(full.outer.merge.df) %in% c("Name.Master.Key", "Last.Name.0", "First.Name.0") ] )
+# Just reordering the columns a bit
+
+full.outer.merge.df <- full.outer.merge.df[
+  order(full.outer.merge.df$Last.Name.0, full.outer.merge.df$First.Name.0), ]
+
+
+ paste3 <- function(...,sep=", ") {
+     L <- list(...)
+     L <- lapply(L,function(x) {x[is.na(x)] <- ""; x})
+     ret <-gsub(paste0("(^",sep,"|",sep,"$)"),"",
+                 gsub(paste0(sep,sep),sep,
+                      do.call(paste,c(L,list(sep=sep)))))
+     is.na(ret) <- ret==""
+     # Uses this feature (explained in the help file): "The generic function is.na<- sets elements to NA."
+     ret
+     }
+paste3(c("a","b", "c", NA), c("A","", "", NA), c(1:3, NA)) 
+# Thanks to http://stackoverflow.com/questions/13673894/suppress-nas-in-paste
+
+# Note that we are using sep=", " for all this
+full.outer.merge.df$Home.Address.Combined.EN <- with(full.outer.merge.df,
+     paste0( Home.Address.Line.1.EN, Home.Address.Line.2.EN, Home.Address.Line.3.EN, 
+       Home.Address.Line.4.EN, Home.City.EN, Home.State.EN, Home.Zip.EN, Home.Country.EN) )
+
+full.outer.merge.df$Mail.Address.Combined.EN <- with(full.outer.merge.df,
+     paste3( Mail.Address.Line.1.EN, Mail.Address.Line.2.EN, Mail.Address.Line.3.EN, 
+       Mail.Address.Line.4.EN, Mail.City.EN, Mail.State.EN, Mail.Zip.EN, Mail.Country.EN) )
+
+full.outer.merge.df$Address.Combined.MB <- with(full.outer.merge.df,
+     paste3( Address.MP, City.MP, State.MP, Zip.MP) )
+
+tail(full.outer.merge.df$Mail.Address.Line.4.EN)
+
+full.outer.merge.df$Address.0 <- NA
+
+full.outer.merge.df$Address.0[!is.na(full.outer.merge.df$Address.Combined.MB)] <- 
+  full.outer.merge.df$Address.Combined.MB[!is.na(full.outer.merge.df$Address.Combined.MB)]
+full.outer.merge.df$Address.0[!is.na(full.outer.merge.df$Mail.Address.Combined.EN)] <- 
+  full.outer.merge.df$Mail.Address.Combined.EN[!is.na(full.outer.merge.df$Mail.Address.Combined.EN)]
+# So the enrollment address data has precedence because it is probably more up to date than
+# the membership data
+
+# Not sure why we are still getting the commas between empty strings, but I don't care enough
+# to fix it now
+
+# TODO: convert all missing values to ""
+
+
+write.csv(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.csv", row.names=FALSE, fileEncoding="Latin1")
+
+# , na=""
+
+
+
+table(Emp = membership.after.dedup.df$membership.employment.key!="No Match w Emp", 
+      Enr=membership.after.dedup.df$membership.enrollment.key!="No Match w Enr")
+
+
+table(Enr = employment.after.dedup.df$enrollment.employment.key!="No Match w Enr", 
+      Mem=employment.after.dedup.df$membership.employment.key!="No Match w Mem")
+
+
+
+table(Emp = enrollment.after.dedup.df$enrollment.employment.key!="No Match w Emp", 
+      Mem=enrollment.after.dedup.df$membership.enrollment.key!="No Match w Mem")
+
 
 # membership.employment.key	membership.enrollment.key
 # No Match w Emp	No Match w Enr
 
 
 # getpairs.output[getpairs.output$L_name_for_rec_linkage.2=="BARANOWSKI",][1:3, ]
-
-
-test <- 1:10
-test[c(1, 7, 2, NA, 3)] <- c("BYU1", "hgui2", "3", "4", "5")
-
 
 # TODO: and at the end sort it by last name, first name?
 
@@ -1187,6 +1330,23 @@ colnames(membership.after.dedup.df)[colnames(membership.after.dedup.df)==""] <- 
 
 # TODO: DO I put the "anchor (person's) name" as the cleaned up name or not? probably yes.
 # Then which columns are these?
+
+
+
+
+summary( employment.df$Fte )
+
+breaks=c(0, .20, )
+
+hist(employment.df$Fte*100, breaks=20, col="red", cex.axis=2 )
+
+hist(employment.df$Fte*employment.df$UW.Pay.Rate, breaks=20, col="red", cex.axis=2 )
+
+
+
+# No fellows in database
+
+
 
 
 
