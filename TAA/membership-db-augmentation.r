@@ -1282,6 +1282,58 @@ write.csv(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad
 # , na=""
 
 
+# full.outer.merge.df <- read.csv("/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.csv",  fileEncoding="Latin1", stringsAsFactors=FALSE)
+
+
+t(t(table(full.outer.merge.df$Fte.EM)))
+
+t(t(table(full.outer.merge.df$Uw.Jobcode.Descr.EM)))
+
+
+thirty.three.appt.prop.table<- with(full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="LECTURER (SA)", ], 
+prop.table(table( ACAD_PLAN_LONG_DESCR, Fte.EM <= .4 &  Fte.EM >= .3), margin=1))[, 2]
+
+thirty.three.appt.freq.table <- with(full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="LECTURER (SA)", ], 
+table( ACAD_PLAN_LONG_DESCR, Fte.EM <= .4 &  Fte.EM >= .3))
+
+stopifnot(all(names(thirty.three.appt.prop.table) == names(thirty.three.appt.freq.table)))
+# The above _must_ be true, since we are going to combine based only on position
+
+thirty.three.appt.ENROLLMENT.dept.df <- data.frame(enrolled.department=names(thirty.three.appt.prop.table),
+  proportion.at.30_40.perc=thirty.three.appt.prop.table, number.of.grads.at.30_40.perc=thirty.three.appt.freq.table[, 2], 
+  number.of.grads.at.ANOTHER.perc=thirty.three.appt.freq.table[, 1], stringsAsFactors=FALSE) 
+
+
+
+
+thirty.three.appt.prop.table<- with(full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="LECTURER (SA)", ], 
+prop.table(table( department_for_match.EM, Fte.EM <= .4 &  Fte.EM >= .3), margin=1))[, 2]
+
+thirty.three.appt.freq.table <- with(full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="LECTURER (SA)", ], 
+table( department_for_match.EM, Fte.EM <= .4 &  Fte.EM >= .3))[, 2]
+
+stopifnot(all(names(thirty.three.appt.prop.table) == names(thirty.three.appt.freq.table)))
+# The above _must_ be true, since we are going to combine based only on position
+
+thirty.three.appt.EMPLOYMENT.dept.df <- data.frame(employing.department=names(thirty.three.appt.prop.table),
+  proportion.at.30_40.perc=thirty.three.appt.prop.table, number.of.grads.at.30_40.perc=thirty.three.appt.freq.table[, 2], 
+  number.of.grads.at.ANOTHER.perc=thirty.three.appt.freq.table[, 1], stringsAsFactors=FALSE) 
+
+
+
+write.csv(thirty.three.appt.ENROLLMENT.dept.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Enrolled-based percentage at 30-40 percent.csv", row.names=FALSE, fileEncoding="Latin1")
+write.csv(thirty.three.appt.EMPLOYMENT.dept.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Employment-based percentage at 30-40 percent.csv", row.names=FALSE, fileEncoding="Latin1")
+
+
+
+t(t(table(full.outer.merge.df[full.outer.merge.df$department_for_match.EM=="ENGLISH", "ACAD_PLAN_LONG_DESCR"])))
+
+t(t(table(full.outer.merge.df[full.outer.merge.df$ACAD_PLAN_LONG_DESCR=="English PHD", "department_for_match.EM"])))
+
+
+
+
+
 
 table(Emp = membership.after.dedup.df$membership.employment.key!="No Match w Emp", 
       Enr=membership.after.dedup.df$membership.enrollment.key!="No Match w Enr")
