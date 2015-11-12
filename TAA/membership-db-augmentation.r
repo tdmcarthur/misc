@@ -1,12 +1,19 @@
 
+# TODO: A way to make less fragile is to always select on columns via "" subscript notation rather than $
+# TODO: SOme people have gmail accounts,etc, listed in the employment and enrollment database. Could try to match again on those
+# TODO: Maybe just have .EN, etc. after every column, not just to ones with ambiguous providence
 
 # This all is a little hack-y since I dont keep the three datasets in w big list, which would have made this more elegant
 
 membership.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/20151022 - TAA membership.csv"
-employment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/TAA Open Records Request 2015.csv"
+#employment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/TAA Open Records Request 2015.csv"
+employment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/Employment data - Nov 2015 Records Request.csv"
+
+
 enrollment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/GRAD_Enrolled_Home_Mail_LvngOnCampus_Phone_Email_AcadGroup_Major.csv"
 
 membership.df <- read.csv(membership.file.location, stringsAsFactor=FALSE, header=FALSE, fileEncoding="Latin1")
+# TODO: Setting to , na.strings=c("", "NA"), but not sure if this is the right thing to do
 membership.df <- membership.df[-1, ]
 colnames(membership.df) <- make.names(strsplit(readLines(membership.file.location, n=1), split=",")[[1]])
 # It has a problem with reading in the column names, so have to do this.
@@ -27,15 +34,70 @@ enrollment.df$enrollment.db.id <- 1:nrow(enrollment.df)
 
 
 
-employment.names.split.ls <- lapply(strsplit(employment.df$Name, split=","),   
+employment.names.split.ls <- lapply(strsplit(employment.df$Name, split=", "),   
        function(x) {
          data.frame(first.name=strsplit(x[2], " ")[[1]][1], 
                     last.name=x[1], stringsAsFactors=FALSE)
          } 
 )
 # Have to do a second split since don't want to split up any spaces in the last name
+# Ah so in the Nov database the names are separated by a comma and a space, rather than just a comma.
 
 employment.df <- cbind(employment.df, do.call(rbind, employment.names.split.ls) )
+
+
+num.appt.df <- as.data.frame.table(table(employment.df[, "Emplid"]))
+num.appt.df[, 1] <- as.character(num.appt.df[, 1])
+colnames(num.appt.df) <- c("Emplid", "num.appointments")
+
+
+employment.df <- employment.df[ order(employment.df$Uw.Dv.Job.Fte, decreasing = TRUE), ]
+# So the highest FTE is considered your "first" appointment
+
+multi.appts.ls <- list()
+
+employment.multi.processing.df <- employment.df
+
+i <- 1
+
+while (nrow(employment.multi.processing.df) > 0) {
+  
+  multi.appts.ls[[i]] <- 
+    employment.multi.processing.df[!duplicated(employment.multi.processing.df[, "Emplid"]), ]
+  
+  employment.multi.processing.df <- 
+    employment.multi.processing.df[duplicated(employment.multi.processing.df[, "Emplid"]), ]
+  
+  i <- i + 1
+  
+}
+# Can'ty use email address for the above, since some people have "" for email address, which would mess it up.
+rm(i)
+
+mult.appt.columns <- c("Empl.Rcd", "Position.Nbr", "Deptid", "Empl.Class", "Uw.Deptid.Descr", "Uw.Jobcode.Descr", "Uw.Dv.Job.Fte", "Uw.Comprate", "Uw.Pay.Basis")
+
+colnames(multi.appts.ls[[1]])[colnames(multi.appts.ls[[1]]) %in% mult.appt.columns] <- 
+  paste0(colnames(multi.appts.ls[[1]])[colnames(multi.appts.ls[[1]]) %in% mult.appt.columns], ".First")
+
+employment.df <- multi.appts.ls[[1]]
+
+colnames(multi.appts.ls[[2]])[colnames(multi.appts.ls[[2]]) %in% mult.appt.columns] <- 
+  paste0(colnames(multi.appts.ls[[2]])[colnames(multi.appts.ls[[2]]) %in% mult.appt.columns], ".Second")
+
+
+employment.df <- merge(employment.df, 
+    multi.appts.ls[[2]][, c("Emplid", paste0(mult.appt.columns, ".Second"))], all.x=TRUE)
+
+employment.df <- merge(employment.df, num.appt.df)
+# Should not need the "all" argument here, since num.appt.df should have all the id's that employment.df does
+
+#table(employment.df$num.appointments)
+
+employment.df <- employment.df[order(employment.df[, "Name"]), ]
+
+
+
+
 
 # Setting all names to upper so comparison is easier below
 
@@ -71,6 +133,15 @@ enrollment.df$F.name.for.match.EN <- gsub("( +.+)", "", enrollment.df$F.name.for
 
 # Splitting email into the pure and composite wisc emails
 
+
+membership.df$Primary.Email <- tolower(membership.df$Primary.Email)
+membership.df$Secondary.Email <- tolower(membership.df$Secondary.Email)
+enrollment.df$EMAIL_ADDRESS <- tolower(enrollment.df$EMAIL_ADDRESS)
+employment.df$Uw.Bn.Email.Addr <- tolower(employment.df$Uw.Bn.Email.Addr)
+# To make emails perfectly comparable
+
+
+
 membership.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", membership.df$Primary.Email, 
                                               fixed=TRUE), membership.df$Primary.Email, NA)
 membership.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", membership.df$Secondary.Email, 
@@ -91,8 +162,17 @@ enrollment.df$composite.wisc.email <- ifelse(grepl(".wisc.edu", enrollment.df$EM
                                               fixed=TRUE), enrollment.df$EMAIL_ADDRESS, NA)
 
 
+employment.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", employment.df$Uw.Bn.Email.Addr, 
+                                              fixed=TRUE), employment.df$Uw.Bn.Email.Addr, NA)
+
+employment.df$composite.wisc.email <- ifelse(grepl(".wisc.edu", employment.df$Uw.Bn.Email.Addr, 
+                                              fixed=TRUE), employment.df$Uw.Bn.Email.Addr, NA)
 
 
+# employment.df$Uw.Bn.Email.Addr[is.na(employment.df$pure.wisc.email ) & is.na(employment.df$composite.wisc.email)]
+# ~170 emails like this
+# enrollment.df$EMAIL_ADDRESS[is.na(enrollment.df$pure.wisc.email ) & is.na(enrollment.df$composite.wisc.email)]
+# Only a few emails like this
 
 
 
@@ -186,8 +266,9 @@ membership.merge.names.df <- merge.temp[!is.na(merge.temp$membership.db.id), ]
 #enrollment.df$pure.wisc.email
 #enrollment.df$composite.wisc.email
 
-employment.after.dedup.df$pure.wisc.email <- "NOMATCH@wisc.edu"
-employment.after.dedup.df$composite.wisc.email <- "NOMATCH@nomatch.wisc.edu"
+#employment.after.dedup.df$pure.wisc.email <- "NOMATCH@wisc.edu"
+#employment.after.dedup.df$composite.wisc.email <- "NOMATCH@nomatch.wisc.edu"
+# Had to do this above when we didn't have the eail data for the employment records
 
 # TODO: NA's for now, before we work out the webscrape.
 
@@ -577,13 +658,17 @@ membership.after.dedup.df$department_for_match[membership.after.dedup.df$departm
 enrollment.after.dedup.df$department_for_match <- enrollment.after.dedup.df$ACAD_PLAN_LONG_DESCR
 enrollment.after.dedup.df$department_for_match <- gsub("( PHD)|( MS)|( MFA)|( MA)" , "", enrollment.after.dedup.df$department_for_match)
 
-employment.after.dedup.df$department_for_match <- employment.after.dedup.df$Uw.Deptid.Descr
+employment.after.dedup.df$department_for_match <- employment.after.dedup.df$Uw.Deptid.Descr.First
+# NOTE: Using the "first" department as the department for match
 employment.after.dedup.df$department_for_match <- sapply(strsplit(employment.after.dedup.df$department_for_match, "/"), FUN=function(x) {
   if(length(x)==1) {
     return(x[1])
   } else {
     return(x[2])
   } } )
+# TODO: Some departments have the "escape" slash as the divider: "WSLH\\ENVIRN SC\\WATR MICRB"
+# Need to handle that.
+
 
 employment.after.dedup.df$department_for_match <- gsub("[^ ]&[^ ]", " & ", employment.after.dedup.df$department_for_match)
 
@@ -1048,6 +1133,7 @@ employment.after.dedup.df <- rename(employment.after.dedup.df, c(
   "L_name_for_rec_linkage"="L_name_for_rec_linkage.EM",
   "department_for_match"="department_for_match.EM"
 ))
+# TODO: The following `from` values were not present in `x`: Uw.Jobcode.Descr, Deptid, Uw.Deptid.Descr, Fte, UW.Pay.Rate
   
 # TODO: Probably want some error handling if not all of the columns exist in future datasets
 # 
@@ -1136,6 +1222,65 @@ employment.after.dedup.df$Last.Name.EM[match(
 
 # TODO: Double check that each of these above are doing the corect thing
 # TODO: Maybe have the employment database be lower case in the names
+
+
+
+
+
+d.tmp <- as.Date(enrollment.after.dedup.df$BIRTHDATE, format="%m/%d/%y")
+enrollment.after.dedup.df$BIRTHDATE.formatted <- as.Date(ifelse(d.tmp > Sys.Date(), format(d.tmp, "19%y-%m-%d"), format(d.tmp)))
+# This prevents "births" in the future - i.e. it converts births after '15 to 1915 and later, not 2015 and later
+# Thanks to http://stackoverflow.com/questions/9508747/add-correct-century-to-dates-with-year-provided-as-year-without-century-y
+# hist(full.outer.merge.df$BIRTHDATE.formatted, breaks="years", las=3, cex.axis=.7 )
+# hist(log((-1)*as.numeric(full.outer.merge.df$BIRTHDATE.formatted) + as.numeric(max(full.outer.merge.df$BIRTHDATE.formatted, na.rm = TRUE))), las=3, cex.axis=.7 )
+# Wow. Like log-triangular. http://ecolego.facilia.se/ecolego/show/Log-Triangular%20Distribution
+# http://www.minem.gob.pe/minem/archivos/file/dgaam/publicaciones/curso_cierreminas/02_Técnico/03_Calidad%20de%20Aguas/TecCalAg-L4_GoldSim_App%20A-B.pdf
+# summary(full.outer.merge.df$BIRTHDATE.formatted)
+
+
+
+# install.packages("lubridate")
+library("lubridate")
+
+enrollment.after.dedup.df$age <- year(as.period(new_interval(enrollment.after.dedup.df$BIRTHDATE.formatted, as.Date(Sys.Date()))))
+# TODO: What is this warning message?: Warning message:
+# In Ops.factor(left, right) : ‘-’ not meaningful for factors
+# I can't tell what the problem is
+
+degree.codes <- c("AUD ", "DMA ", "DNP ", "PHD ", "MA ", "MS ", "MM ", "MFA ", "MBA ", "MSB ", "ME ", "MAC ", "MSW ", "MPA ", "MFS ", "MIPA5", "NE ", "GRAD0")
+
+enrollment.after.dedup.df$degree.type.detailed <- NA
+for (i in degree.codes) {
+  enrollment.after.dedup.df$degree.type.detailed[grepl(i, enrollment.after.dedup.df$Plan.Code.EN)] <- gsub(" ", "", i)
+}
+
+enrollment.after.dedup.df$degree.type.simple <- NA
+enrollment.after.dedup.df$degree.type.simple[enrollment.after.dedup.df$degree.type.detailed %in% 
+  c("MA", "MS", "MM", "MFA", "MBA", "MSB", "ME", "MAC", "MSW", "MPA", "MFS", "MIPA5", "NE", "GRAD0") ] <- "Master's"
+enrollment.after.dedup.df$degree.type.simple[enrollment.after.dedup.df$degree.type.detailed %in% c("AUD", "DMA", "DNP", "PHD")]  <- "Doctorate"
+
+
+# Classifying the NE (Nuclear Enginerring) one is ambiguous. Just set to master's.
+# And I'm going to set "nondegree" to MS
+
+# See https://www.gradsch.wisc.edu/mas/
+
+#MA: MIPA5, 
+#PHD : DMA, AUD, DNP
+#GRAD0 : nondegree
+
+enrollment.after.dedup.df$is.intl.student <- (! enrollment.after.dedup.df$Home.Country.EN %in% c("", "United States Territory", "US Minor Outlying Islands", "Puerto Rico" ) )
+# So excluding US territories from the classifoctaion of intl student here.
+# Seems there is a problem here, since none of these are
+# table(full.outer.merge.df$is.intl.student)
+
+
+
+
+
+
+
+
 
 
 
@@ -1250,7 +1395,7 @@ paste3(c("a","b", "c", NA), c("A","", "", NA), c(1:3, NA))
 
 # Note that we are using sep=", " for all this
 full.outer.merge.df$Home.Address.Combined.EN <- with(full.outer.merge.df,
-     paste0( Home.Address.Line.1.EN, Home.Address.Line.2.EN, Home.Address.Line.3.EN, 
+     paste3( Home.Address.Line.1.EN, Home.Address.Line.2.EN, Home.Address.Line.3.EN, 
        Home.Address.Line.4.EN, Home.City.EN, Home.State.EN, Home.Zip.EN, Home.Country.EN) )
 
 full.outer.merge.df$Mail.Address.Combined.EN <- with(full.outer.merge.df,
@@ -1277,12 +1422,41 @@ full.outer.merge.df$Address.0[!is.na(full.outer.merge.df$Mail.Address.Combined.E
 # TODO: convert all missing values to ""
 
 
+
+
+
 write.csv(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.csv", row.names=FALSE, fileEncoding="Latin1")
+
+# TODO: I should really have an R format output, too
 
 # , na=""
 
 
-# full.outer.merge.df <- read.csv("/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.csv",  fileEncoding="Latin1", stringsAsFactors=FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# full.outer.merge.df <- read.csv("/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.csv",  fileEncoding="Latin1", stringsAsFactors=FALSE) #, na.strings=c("", "NA"))
 
 
 t(t(table(full.outer.merge.df$Fte.EM)))
@@ -1310,7 +1484,7 @@ thirty.three.appt.prop.table<- with(full.outer.merge.df[full.outer.merge.df$Uw.J
 prop.table(table( department_for_match.EM, Fte.EM <= .4 &  Fte.EM >= .3), margin=1))[, 2]
 
 thirty.three.appt.freq.table <- with(full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="LECTURER (SA)", ], 
-table( department_for_match.EM, Fte.EM <= .4 &  Fte.EM >= .3))[, 2]
+table( department_for_match.EM, Fte.EM <= .4 &  Fte.EM >= .3))
 
 stopifnot(all(names(thirty.three.appt.prop.table) == names(thirty.three.appt.freq.table)))
 # The above _must_ be true, since we are going to combine based only on position
@@ -1333,6 +1507,11 @@ t(t(table(full.outer.merge.df[full.outer.merge.df$ACAD_PLAN_LONG_DESCR=="English
 
 
 
+table(membership.after.dedup.df$membership.employment.key!="No Match w Emp")
+table(employment.after.dedup.df$enrollment.employment.key!="No Match w Enr")
+prop.table(table(employment.after.dedup.df$enrollment.employment.key!="No Match w Enr"))
+
+table(employment.after.dedup.df$Uw.Jobcode.Descr.First, employment.after.dedup.df$enrollment.employment.key!="No Match w Enr")
 
 
 table(Emp = membership.after.dedup.df$membership.employment.key!="No Match w Emp", 
@@ -1355,6 +1534,544 @@ table(Emp = enrollment.after.dedup.df$enrollment.employment.key!="No Match w Emp
 # getpairs.output[getpairs.output$L_name_for_rec_linkage.2=="BARANOWSKI",][1:3, ]
 
 # TODO: and at the end sort it by last name, first name?
+
+
+
+# summary(glm(is.TAA.member ~ gre + gpa + rank, family=binomial(link="probit"), data=full.outer.merge.df) )
+
+
+full.outer.merge.df$BIRTHDATE.formatted <- 
+d.tmp <- as.Date(full.outer.merge.df$BIRTHDATE, format="%m/%d/%y")
+full.outer.merge.df$BIRTHDATE.formatted <- as.Date(ifelse(d.tmp > Sys.Date(), format(d.tmp, "19%y-%m-%d"), format(d.tmp)))
+# This prevents "births" in the future - i.e. it converts births after '15 to 1915 and later, not 2015 and later
+# Thanks to http://stackoverflow.com/questions/9508747/add-correct-century-to-dates-with-year-provided-as-year-without-century-y
+# hist(full.outer.merge.df$BIRTHDATE.formatted, breaks="years", las=3, cex.axis=.7 )
+# hist(log((-1)*as.numeric(full.outer.merge.df$BIRTHDATE.formatted) + as.numeric(max(full.outer.merge.df$BIRTHDATE.formatted, na.rm = TRUE))), las=3, cex.axis=.7 )
+# Wow. Like log-triangular. http://ecolego.facilia.se/ecolego/show/Log-Triangular%20Distribution
+# http://www.minem.gob.pe/minem/archivos/file/dgaam/publicaciones/curso_cierreminas/02_Técnico/03_Calidad%20de%20Aguas/TecCalAg-L4_GoldSim_App%20A-B.pdf
+# summary(full.outer.merge.df$BIRTHDATE.formatted)
+
+full.outer.merge.df$is.intl.student <- (! full.outer.merge.df$Home.Country.EN %in% c("", "United States Territory", "US Minor Outlying Islands", "Puerto Rico" ) )
+# So excluding US territories from the classifoctaion of intl student here.
+# Seems there is a problem here, since none of these are
+# table(full.outer.merge.df$is.intl.student)
+
+full.outer.merge.df$Uw.Jobcode.Descr.EM[full.outer.merge.df$Uw.Jobcode.Descr.EM=="PRG AST-GRADER/READER" ] <- "PRJ AST-GRADER/READER"
+full.outer.merge.df$Uw.Jobcode.Descr.EM[full.outer.merge.df$Uw.Jobcode.Descr.EM=="PROGRAM ASST-REG" ] <- "PROJECT ASST-REG"
+# Consolidating program assistants into project assistants because it is messing up our regressions
+
+table(is.na(full.outer.merge.df$Home.Country.EN))
+# For now, none are NA
+
+# install.packages("mfx")
+library("mfx")
+# install.packages("erer")
+library("erer")
+
+
+
+
+
+# install.packages("glmx")
+library("glmx")
+
+targ.formula <- as.numeric(is.TAA.member) ~ log(age.EN) +  Uw.Jobcode.Descr.EM + is.intl.student + degree.type.simple 
+
+# Note that hetglm will make the variance and mean eqn the same if only the mean eqn is specified.
+
+het.glm.comparison <- hetglm(targ.formula    , 
+                             data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="", ],
+      family = binomial(link = "probit"), control = hetglm.control(method="BFGS", trace=T, reltol=1e-12, maxit = 2000 )) #, link.scale = "identity") 
+
+
+oglmx.output.robust.con <- oglmx.controlled(formulaMEAN=  targ.formula   , 
+                      formulaSD =targ.formula , 
+                      data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ], 
+                      link = "probit", constantMEAN = T, analhessian = T, savemodelframe=F, robust=TRUE, SameModelMEANSD=TRUE,
+
+        constantSD = TRUE, delta = 0, threshparam = 0, method="NR", print.level=3, iterlim = 0, start=coef(het.glm.comparison)) #, SameModelMEANSD=TRUE)
+
+
+margins.oglmx(oglmx.output.robust.con, outcomes=1, dummyzero = TRUE)
+
+McFaddensR2.oglmx(oglmx.output.robust.con)
+summary(oglmx.output.robust.con)
+
+with(full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ],
+     ftable(Uw.Jobcode.Descr.EM, is.intl.student, is.TAA.member) )
+
+degree.type.simple, 
+
+
+
+
+
+
+
+
+
+
+
+
+
+# age.EN + 
+maBina(glm(is.TAA.member ~ age.EN + Uw.Jobcode.Descr.EM + is.intl.student, family=binomial(link="probit"), data=full.outer.merge.df, x=TRUE), x.mean = F, rev.dum = F, digits = 3,
+      subset.name = NULL, subset.value)
+
+bptest(is.TAA.member ~   age.EN + Uw.Jobcode.Descr.EM + is.intl.student, varformula = ~ is.intl.student,  data = full.outer.merge.df)
+
+# Below is an attempt to make sense of where the heteroskedastciity it coming from (probably age).
+# But I can make neither hide not tail of it. I used these resources:
+# http://stats.stackexchange.com/questions/82682/how-do-i-interpret-this-fitted-vs-residuals-plot
+# http://stats.stackexchange.com/questions/33028/measures-of-residuals-heteroscedasticity
+
+test.lm <- lm(is.TAA.member ~ age.EN + Uw.Jobcode.Descr.EM + is.intl.student,  data=full.outer.merge.df)
+summary(test.lm)$adj.r.squared
+
+plot(resid(test.lm), test.lm$model$age.EN)
+
+ plot(fitted(test.lm), residuals(test.lm))
+
+res <- residuals(test.lm)
+pred <- predict(test.lm)
+n.bins <- 30
+bins <- cut(pred, quantile(pred, probs = seq(0, 1, 1/n.bins)))
+b <- boxplot(res ~ bins, boxwex=1/2, main="Residuals vs. Predicted",
+             xlab="Predicted", ylab="Residual")
+colors <- hsv(seq(2/6, 1, 1/6))
+temp <- sapply(1:5, function(i) lines(lowess(1:n.bins, b$stats[i,], f=.25), 
+        col=colors[i], lwd=2))
+
+
+
+
+
+summary(glm(is.TAA.member ~ age.EN + Uw.Jobcode.Descr.EM + is.intl.student, family=binomial(link="probit"), data=full.outer.merge.df) )
+
+
+probitmfx(formula = is.TAA.member ~ age.EN + Uw.Jobcode.Descr.EM + is.intl.student, 
+          data=full.outer.merge.df, atmean = TRUE) # , robust = TRUE)
+# robust = TRUE changes everything above. not sure what to do
+
+logitmfx(formula = is.TAA.member ~  is.intl.student, 
+          data=full.outer.merge.df, atmean = TRUE, robust = TRUE)
+
+Acad.Group.Long.Descr.EN
+
+table(full.outer.merge.df$is.intl.student, full.outer.merge.df$is.TAA.member)
+with(full.outer.merge.df[with(full.outer.merge.df,complete.cases(BIRTHDATE.formatted, is.intl.student, Uw.Jobcode.Descr.EM)), ],
+     table( Uw.Jobcode.Descr.EM,  is.intl.student) )
+with(full.outer.merge.df[with(full.outer.merge.df,complete.cases(BIRTHDATE.formatted, is.intl.student, Uw.Jobcode.Descr.EM)), ],
+     table( is.TAA.member,  is.intl.student) )
+round(prop.table(table(full.outer.merge.df$Uw.Jobcode.Descr.EM, full.outer.merge.df$is.TAA.member), margin=1)*100, 1)
+round(prop.table(table(full.outer.merge.df$degree.type.simple, full.outer.merge.df$is.TAA.member), margin=1)*100, 1)
+
+
+round(prop.table(table(full.outer.merge.df$Acad.Group.Long.Descr.EN, full.outer.merge.df$is.TAA.member), margin=1)*100, 1)
+round(prop.table(table(full.outer.merge.df$PRIMARY_ACADEMIC_GROUP, full.outer.merge.df$is.TAA.member), margin=1)*100, 2)
+table(full.outer.merge.df$Uw.Jobcode.Descr.EM, full.outer.merge.df$is.intl.student)
+chisq.test(table(full.outer.merge.df$Uw.Jobcode.Descr.EM, full.outer.merge.df$is.TAA.member))
+# sample(1:3, nrow(full.outer.merge.df), replace=T)
+# View(full.outer.merge.df[1:10, ])
+
+# install.packages("lubridate")
+library("lubridate")
+# install.packages("oglmx")
+library("oglmx")
+# Awesome package!!! # as.numeric(is.TAA.member)
+
+full.outer.merge.df$age.EN <- year(as.period(as.Date(Sys.Date()) - full.outer.merge.df$BIRTHDATE.formatted, unit="year"))
+
+mail.state.EN=="WI"
+
+full.outer.merge.df$is.intl.student <- as.factor(full.outer.merge.df$is.intl.student)
+
+with(full.outer.merge.df, cor(age.EN, as.numeric(is.TAA.member), use="complete.obs"))
+
+str(full.outer.merge.df$age.EN)
+summary(full.outer.merge.df$age.EN)
+with(full.outer.merge.df, summary(lm(as.numeric(is.TAA.member) ~ I(age.EN/100) ))
+with(full.outer.merge.df, summary(lm(as.numeric(is.TAA.member) ~ is.intl.student )))
+with(full.outer.merge.df, summary(lm(as.numeric(is.TAA.member) ~ Fte.EM )))
+with(full.outer.merge.df, summary(lm(as.numeric(is.TAA.member) ~ age.EN + Fte.EM + (Mail.State.EN=="WI") + is.intl.student + as.factor(Uw.Jobcode.Descr.EM) )))
+
+levels(as.factor(full.outer.merge.df$Uw.Jobcode.Descr.EM))
+
+full.outer.merge.df$Fte.EM[is.na(full.outer.merge.df$Fte.EM)] <- 0
+full.outer.merge.df$is.intl.student <- as.character(full.outer.merge.df$is.intl.student)
+full.outer.merge.df$is.intl.student[1:200] <- "Maybe"
+
+# + as.numeric(is.intl.student)
+# PRIMARY_ACADEMIC_GROUP # as.factor(Uw.Jobcode.Descr.EM)
+oglmx.output.robust.con <- oglmx.controlled(formulaMEAN= as.numeric(is.TAA.member) ~ log(age.EN) + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student + degree.type.simple    , 
+                      formulaSD = ~ log(age.EN) + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student + degree.type.simple , 
+                      data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ], 
+                      link = "probit", constantMEAN = T, analhessian = T, savemodelframe=F, robust=TRUE,
+
+        constantSD = TRUE, delta = 0, threshparam = 0, method="NR", print.level=0, iterlim = 1, start=coef(het.glm.comparison)) #, SameModelMEANSD=TRUE)
+# robust=TRUE, savemodelframe=TRUE, 
+# Must do the complete.cases stuff since oglmx drops the factor levels that do not appear in the final dataset _after_ checking
+# the error condition, but hetglm does it before
+# Got the above extra arguments from examining the source code of probit.reg, because I have just binary outcome. Seems
+# that the delta = 0 and threshparam = 0  arguments are important to make this actually work.
+# Leacing out + as.factor(Uw.Jobcode.Descr.EM) for now because it doesn't seems to like too mnay vars in the variance eqn
+# Not sure what to do with the "robust" argument
+McFaddensR2.oglmx(oglmx.output.robust.con)
+summary(oglmx.output.robust.con)
+margins.oglmx(oglmx.output, dummyzero = TRUE)
+margins.oglmx(oglmx.output.robust, dummyzero = TRUE)
+margins.oglmx(oglmx.output.robust.con, outcomes=1, dummyzero = TRUE)
+probitmfx(formula = is.TAA.member ~ log(age.EN) + Uw.Jobcode.Descr.EM + is.intl.student, data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ], atmean = TRUE)
+
+
+              , ascontinuous=TRUE)
+              # AME=TRUE, ascontinuous=TRUE)
+
+probitmfx(formula = as.numeric(degree.type.simple=="Doctorate") ~ log(age.EN) , data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ], atmean = TRUE)
+
+
+summary(lm(as.numeric(degree.type.simple=="Doctorate") ~ log(age.EN) , data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ]))
+
+probitmfx(formula = as.numeric(is.TAA.member) ~ degree.type.simple , data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ], atmean = TRUE)
+
+summary(lm(as.numeric(is.TAA.member) ~ degree.type.simple , data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="" & with(full.outer.merge.df,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ]))
+
+
+
+
+
+#ok do bootstrap:
+
+
+n.straps <- 100
+
+boot.collect <- list()
+set.seed(100)
+for ( boot.num in 1:n.straps) {
+# reltol=1e-12, 
+  
+  full.outer.merge.df.boot <- full.outer.merge.df[sample(nrow(full.outer.merge.df), replace=TRUE),]
+  
+  het.glm.comparison <- hetglm(as.numeric(is.TAA.member) ~  log(age.EN) + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student  | log(age.EN) + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student   , 
+                             data=full.outer.merge.df.boot,
+      family = binomial(link = "probit"), control = hetglm.control(method="BFGS", trace=F, reltol=1e-12, maxit = 20000 )) 
+  
+
+  oglmx.output.robust.con <- oglmx.controlled(formulaMEAN= as.numeric(is.TAA.member) ~ log(age.EN) + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student    , 
+                      formulaSD = ~ log(age.EN) + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student , 
+                      data=full.outer.merge.df.boot[with(full.outer.merge.df.boot,complete.cases(age.EN, Uw.Jobcode.Descr.EM, is.intl.student)), ], 
+                      link = "probit", constantMEAN = T, analhessian = T, 
+
+        constantSD = TRUE, delta = 0, threshparam = 0, method="NR", print.level=3, iterlim = 0, start=coef(het.glm.comparison), robust=TRUE) #, SameModelMEANSD
+
+
+  boot.collect[[boot.num]]<- margins.oglmx(oglmx.output.robust.con, outcomes=1, dummyzero = TRUE)[[1]][, 1]
+  cat(boot.num, as.character(Sys.time()), "\n")
+
+}
+
+
+cor(log(full.outer.merge.df$age.EN), as.numeric(full.outer.merge.df$is.TAA.member), use="complete.obs" )
+
+margins.oglmx(oglmx.output.robust.con, outcomes=1, location=c(log(25), rep(0, 7)), AME=TRUE)
+dummyzero = TRUE, 
+
+table(sapply(boot.collect, length))
+# A-ok
+
+boot.collect.df <- do.call(rbind, boot.collect)
+
+summary(as.data.frame(boot.collect.df))
+
+
+
+
+
+
+
+
+
+
+
+new.employment.data.df <- read.csv(file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Employment data - Nov 2015 Records Request.csv", fileEncoding="Latin1", stringsAsFactors = FALSE)
+
+nrow(new.employment.data.df)
+
+round(prop.table(table(table(new.employment.data.df$Emplid)))*100, 2)
+table(table(new.employment.data.df$Emplid))
+
+
+with(new.employment.data.df, table( Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3))
+
+with(new.employment.data.df, round(prop.table(table( Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3))*100, digits=2))
+# with(new.employment.data.df, prop.table(table( Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3))) #DOuple-checking something here. we get the same 20.49% below for a different calc - want to triple check that there is no error by looking at all the decimal digits, not just two of them.
+
+
+with(new.employment.data.df, length(unique(Emplid[Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3])))
+with(new.employment.data.df, length(unique(Emplid)))
+
+round(100*(with(new.employment.data.df, length(unique(Emplid[Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3]))) /
+  with(new.employment.data.df, length(unique(Emplid))) ), digits=2)
+ 
+
+fte.sum.by.student.agg <- aggregate(Uw.Dv.Job.Fte ~ Emplid, data= new.employment.data.df, FUN=sum)
+# This will be a problem if there are any NA's in data received later from HR
+
+with(fte.sum.by.student.agg, length(Emplid[Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3]))
+nrow(fte.sum.by.student.agg)
+
+round(100*(with(fte.sum.by.student.agg, length(Emplid[Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3]) /
+  nrow(fte.sum.by.student.agg))), digits=2)
+
+
+hist(new.employment.data.df$Uw.Dv.Job.Fte*100, breaks=20, axes = FALSE, 
+     main="Fig 1: Histogram of number of appointments\nby appointment percentage", 
+     xlab="Appointment percentage", ylab="Number of appointments", col="red", cex.main=.7, cex.lab=.7)
+axis(1, at= (0:10)*10, labels = (0:10)*10, cex.axis=.5)
+axis(2, cex.axis=.55)
+
+#png(filename = "/Users/travismcarthur/Desktop/TAA work/Grad student database/Hist num appointments by perc.png", width = 300, height=300)
+# Xquartz is choking on this for some reason
+
+fte.sum.by.student.agg.topcoded <- fte.sum.by.student.agg
+fte.sum.by.student.agg.topcoded$Uw.Dv.Job.Fte[fte.sum.by.student.agg.topcoded$Uw.Dv.Job.Fte > 1] <- 1
+
+hist(fte.sum.by.student.agg.topcoded$Uw.Dv.Job.Fte*100, breaks=20, axes = FALSE, 
+     main="Fig 2: Histogram of sum of appointment levels\nby number of grad assistants holding\nsuch appointments", 
+     xlab="Sum of appointment percentage", ylab="Number of assistants", col="red", cex.main=.7, cex.lab=.7)
+axis(1, at= (0:10)*10, labels = (0:10)*10, cex.axis=.5)
+axis(2, cex.axis=.55)
+
+
+
+
+table(new.employment.data.df$Uw.Dv.Job.Fte[new.employment.data.df$Uw.Jobcode.Descr %in% c("PRJ AST-GRADER/READER", "PRG AST-GRADER/READER")])
+
+with(new.employment.data.df[new.employment.data.df$Uw.Jobcode.Descr %in% c("PRJ AST-GRADER/READER", "PRG AST-GRADER/READER"), ], table( Uw.Dv.Job.Fte,  Uw.Jobcode.Descr ))
+# Ok, it seems that all grader/readers are set at 0% FTE
+
+table(new.employment.data.df$Uw.Dv.Job.Fte)
+
+
+
+fte.sum.by.student.agg.by.dept <- aggregate(Uw.Dv.Job.Fte ~ Emplid + Uw.Deptid.Descr, data= new.employment.data.df, FUN=sum)
+
+t(t(sort(table(fte.sum.by.student.agg.by.dept$Uw.Deptid.Descr[fte.sum.by.student.agg.by.dept$Uw.Dv.Job.Fte > 0.50]))))
+
+
+t(t(sort(table(fte.sum.by.student.agg.by.dept$Uw.Deptid.Descr[fte.sum.by.student.agg.by.dept$Uw.Dv.Job.Fte > 0.50]))))
+
+fte.sum.by.student.agg.by.dept.proportion <- aggregate(Uw.Dv.Job.Fte ~ Uw.Deptid.Descr, data = fte.sum.by.student.agg.by.dept, FUN=function(x) c(sum(x > 0.50)/length(x), length(x))  )
+# Can do this, but it creates an abomination
+
+fte.sum.by.student.agg.by.dept.proportion <- 
+  data.frame(Uw.Deptid.Descr=fte.sum.by.student.agg.by.dept.proportion$Uw.Deptid.Descr, 
+             g.t.50.prop=fte.sum.by.student.agg.by.dept.proportion$Uw.Dv.Job.Fte[, 1],
+             num.students=fte.sum.by.student.agg.by.dept.proportion$Uw.Dv.Job.Fte[, 2],
+             stringsAsFactors=FALSE)
+
+
+fte.sum.by.student.agg.by.dept.proportion <- fte.sum.by.student.agg.by.dept.proportion[
+  order(fte.sum.by.student.agg.by.dept.proportion[, 2], fte.sum.by.student.agg.by.dept.proportion[, 3], decreasing=TRUE), ]
+
+
+write.csv( fte.sum.by.student.agg.by.dept.proportion, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/More than 50 perc assistants by dept.csv", row.names=FALSE, fileEncoding="Latin1")
+
+
+
+fte.sum.by.student.agg.by.dept.proportion[grepl("ECON", fte.sum.by.student.agg.by.dept.proportion[, 1]), ]
+
+
+
+fte.sum.by.student.math.agg <- aggregate(Uw.Dv.Job.Fte ~ Emplid, 
+   data= new.employment.data.df[new.employment.data.df$Uw.Deptid.Descr=="L&S/MATHEMATICS/MATH", ], FUN=sum)
+
+sort(table(fte.sum.by.student.math.agg$Uw.Dv.Job.Fte))
+
+
+t(t(sort(table(new.employment.data.df$Uw.Deptid.Descr))))
+
+
+#
+
+
+
+str(new.employment.data.df )
+
+round(prop.table(table(table(new.employment.data.df$Emplid)))*100, 2)
+table(table(new.employment.data.df$Emplid))
+
+
+with(new.employment.data.df, table(Uw.Jobcode.Descr,Uw.Pay.Basis) )
+# Pay Basis is explained here: https://kb.wisc.edu/page.php?id=29426
+# Maybe also useful: http://www.bussvc.wisc.edu/acct/codes/ccsalary.html
+# http://www.ohr.wisc.edu/polproced/UPPP/How_Use_Sal_Rngs.htm
+# https://kb.wisc.edu/hrs/page.php?id=29890
+
+
+with(new.employment.data.df, table(Uw.Jobcode.Descr, Empl.Class) )
+
+t(t(sort(table(new.employment.data.df$Uw.Comprate))))
+
+View(new.employment.data.df[new.employment.data.df$Uw.Comprate=="55,587", ])
+
+
+#
+
+table(new.employment.data.df$Uw.Comprate, new.employment.data.df$Uw.Pay.Basis)
+
+
+
+#
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+levels(as.factor(full.outer.merge.df$Uw.Jobcode.Descr.EM))
+# Find the omitted category
+# So the omitted category is just "not employed", since it is blank
+
+library("lmtest")
+library("sandwich")
+# class(oglmx.output) <- c(class(oglmx.output), "glm")
+# class(oglmx.output) <- class(oglmx.output)[1]
+# oglmx.output$family$family <- "logit" ; oglmx.output$family$family <- NULL
+coeftest(coef(oglmx.output), vcov. = vcovHC(oglmx.output)))
+
+
+library("lmtest")
+    # likelihood ratio test to compare model with and without heteroskedasticity.
+oglmx.output.homosk <- oglmx(formulaMEAN= as.numeric(is.TAA.member) ~ as.numeric(BIRTHDATE.formatted) + as.factor(Uw.Jobcode.Descr.EM) + as.factor(is.intl.student),
+                      data=full.outer.merge.df, savemodelframe=TRUE, link = "logit", constantMEAN = TRUE, 
+
+        constantSD = TRUE, delta = 0, threshparam = 0)
+lrtest(oglmx.output.homosk,oglmx.output)
+
+test.for.difference.oglmx <- probit.reg(as.numeric(is.TAA.member) ~ as.numeric(BIRTHDATE.formatted) + as.factor(Uw.Jobcode.Descr.EM) + as.factor(is.intl.student), data=full.outer.merge.df, savemodelframe=TRUE)
+summary(test.for.difference.oglmx)
+homosk.probit.for.comp <- glm(is.TAA.member ~ age.EN + Uw.Jobcode.Descr.EM + is.intl.student, family=binomial(link="probit"), data=full.outer.merge.df) 
+summary(homosk.probit.for.comp)
+# AIC: 1676.4
+summary(oglmx.output.robust)
+full.outer.merge.df$Acad.Group.Long.Descr.EN.fac <- relevel(as.factor(full.outer.merge.df$Acad.Group.Long.Descr.EN), ref="College of Letters and Science")
+
+
+
+
+lm.for.comp <- lm(as.numeric(is.TAA.member) ~  Uw.Jobcode.Descr.EM + is.intl.student + Acad.Group.Long.Descr.EN.fac, data=full.outer.merge.df) 
+summary(lm.for.comp)
+coeftest(lm.for.comp, vcov. = vcovHC)
+summary(predict(lm.for.comp))
+
+prob.mfx.output <- probitmfx(formula = is.TAA.member ~ age.EN +  is.intl.student + Acad.Group.Long.Descr.EN.fac, 
+          data=full.outer.merge.df, atmean = TRUE, robust=TRUE)
+(prob.mfx.output)
+summary(predict(prob.mfx.output, type="response"))
+
+# install.packages("glmnet")
+library("glmnet")
+# http://stats.stackexchange.com/questions/11109/how-to-deal-with-perfect-separation-in-logistic-regression
+targ.formula <- is.TAA.member ~ Uw.Jobcode.Descr.EM + is.intl.student + Acad.Group.Long.Descr.EN.fac
+fit3=glmnet(model.matrix(targ.formula, model.frame(targ.formula, full.outer.merge.df)), as.numeric(full.outer.merge.df$is.TAA.member),family="binomial")
+# Ok, this package is some weird stuff
+
+# install.packages("logistf")
+library("logistf")
+logistf.output <- logistf(is.TAA.member ~ Uw.Jobcode.Descr.EM + is.intl.student + Acad.Group.Long.Descr.EN.fac, full.outer.merge.df)
+summary(logistf.output)[, c("coefficients", "ci.lower", "ci.upper")]
+
+round(do.call(cbind, logistf.output[c("coefficients", "prob","ci.lower", "ci.upper")]), 2)
+
+plot(profile(logistf.output, variable="age.EN"))
+
+lm.for.comp <- lm(as.numeric(is.TAA.member) ~ age.EN +Uw.Jobcode.Descr.EM + is.intl.student + ACAD_PLAN_LONG_DESCR, data=full.outer.merge.df) 
+summary(lm.for.comp)
+coeftest(lm.for.comp, vcov. = vcovHC)
+
+lm.for.comp <- lm(as.numeric(is.TAA.member) ~  is.intl.student , data=full.outer.merge.df) 
+summary(lm.for.comp)
+coeftest(lm.for.comp, vcov. = vcovHC)
+
+
+
+
+is_TAA_member age_EN Uw_Jobcode_Descr_EM is_intl_student
+
+
+levels(as.factor(full.outer.merge.df$Acad.Group.Long.Descr.EN))
+
+# install.packages("glmx")
+library("glmx")
+het.glm.comparison <- hetglm(as.numeric(is.TAA.member) ~  log(age.EN) + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student + degree.type.simple  | log(age.EN)  + as.factor(Uw.Jobcode.Descr.EM) + is.intl.student + degree.type.simple   , 
+                             data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="", ],
+      family = binomial(link = "probit"), control = hetglm.control(method="BFGS", trace=T, reltol=1e-12, maxit = 2000 )) #, link.scale = "identity") 
+summary(het.glm.comparison)
+summary(oglmx.output.robust.con)
+logLik(het.glm.comparison)
+lrtest(het.glm.comparison, het.glm.comparison.2)
+logLik(oglmx.output.robust.con)
+logLik(oglmx.output.robust)
+
+glmx:::predict.hetglm(het.glm.comparison, newdata=, type=response)
+
+as.factor(Uw.Jobcode.Descr.EM) + 
+het.glm.comparison.hom <- hetglm(as.numeric(is.TAA.member) ~  log(age.EN) + Uw.Jobcode.Descr.EM + is.intl.student | 1   , 
+                             data=full.outer.merge.df[full.outer.merge.df$Uw.Jobcode.Descr.EM!="", ],
+      family = binomial(link = "probit"), control = hetglm.control(method="BFGS", trace=T, reltol=1e-12 )) #, link.scale = "identity") 
+het.glm.comparison.hom.2 <- hetglm(as.numeric(is.TAA.member) ~  age.EN + is.intl.student | 1   , 
+                             data=full.outer.merge.df,
+      family = binomial(link = "probit"), control = hetglm.control(method="BFGS", trace=F, reltol=1e-12 )) #, link.scale = "identity") 
+lrtest(het.glm.comparison,het.glm.comparison.hom)
+summary(het.glm.comparison.hom)
+summary(het.glm.comparison.hom.2)
+
+
+
+
+
+This is log lik with  BFGS - 
+logLik(oglmx.output.robust.con) [1] -817.1183
+
+
+sort(unique(full.outer.merge.df$Home.Country.EN))
+
+
+library("foreign")
+full.outer.merge.df.missing <- full.outer.merge.df
+full.outer.merge.df.missing <- as.data.frame(lapply(full.outer.merge.df.missing, FUN=function(x) {
+  if (is.Date(x)) return(x)
+  x[x==""] <- "missing"
+  x}))
+write.dta(full.outer.merge.df.missing, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.dta")
+
+
+
+
+sum(full.outer.merge.df$Home.Country.EN=="Serbia - DO NOT USE")
+# Database fail. Lol.
+
+
+
+
+
+
+
+
 
 
 
@@ -1612,8 +2329,12 @@ TRUE  FALSE       4837  103
       TRUE        3037  287
 
 
+      
+      
+t(t(with(enrollment.df[enrollment.df$ACAD_PLAN_LONG_DESCR=="Agricultural & Appl Econ PHD", ], prop.table(table(Country)))))
 
-
+t(t(with(enrollment.df[enrollment.df$ACAD_PLAN_LONG_DESCR %in%
+    c("Agricultural & Appl Econ MA",  "Agricultural & Appl Econ MS", "Agricultural & Appl Econ PHD"), ], prop.table(table(Country)))))
 
 
 
