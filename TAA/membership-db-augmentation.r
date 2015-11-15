@@ -1,7 +1,7 @@
 
 # TODO: A way to make less fragile is to always select on columns via "" subscript notation rather than $
-# TODO: SOme people have gmail accounts,etc, listed in the employment and enrollment database. Could try to match again on those
-# TODO: Maybe just have .EN, etc. after every column, not just to ones with ambiguous providence
+# DONE: TODO: SOme people have gmail accounts,etc, listed in the employment and enrollment database. Could try to match again on those
+# TODO: Maybe just have .EN, etc. after every column, not just to ones with ambiguous provenance
 
 # This all is a little hack-y since I dont keep the three datasets in w big list, which would have made this more elegant
 
@@ -10,7 +10,10 @@ membership.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student
 employment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/Employment data - Nov 2015 Records Request.csv"
 
 
-enrollment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/GRAD_Enrolled_Home_Mail_LvngOnCampus_Phone_Email_AcadGroup_Major.csv"
+#enrollment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/GRAD_Enrolled_Home_Mail_LvngOnCampus_Phone_Email_AcadGroup_Major.csv"
+enrollment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/taa_fall 2015.csv"
+
+
 
 membership.df <- read.csv(membership.file.location, stringsAsFactor=FALSE, header=FALSE, fileEncoding="Latin1")
 # TODO: Setting to , na.strings=c("", "NA"), but not sure if this is the right thing to do
@@ -33,7 +36,6 @@ enrollment.df$enrollment.db.id <- 1:nrow(enrollment.df)
 
 
 
-
 employment.names.split.ls <- lapply(strsplit(employment.df$Name, split=", "),   
        function(x) {
          data.frame(first.name=strsplit(x[2], " ")[[1]][1], 
@@ -49,6 +51,10 @@ employment.df <- cbind(employment.df, do.call(rbind, employment.names.split.ls) 
 num.appt.df <- as.data.frame.table(table(employment.df[, "Emplid"]))
 num.appt.df[, 1] <- as.character(num.appt.df[, 1])
 colnames(num.appt.df) <- c("Emplid", "num.appointments")
+
+sum.appt.df <- aggregate( Uw.Dv.Job.Fte ~ Emplid, data=employment.df, FUN=sum)
+sum.appt.df[, 1] <- as.character(sum.appt.df[, 1])
+colnames(sum.appt.df) <- c("Emplid", "sum.appointment.perc")
 
 
 employment.df <- employment.df[ order(employment.df$Uw.Dv.Job.Fte, decreasing = TRUE), ]
@@ -74,7 +80,10 @@ while (nrow(employment.multi.processing.df) > 0) {
 # Can'ty use email address for the above, since some people have "" for email address, which would mess it up.
 rm(i)
 
-mult.appt.columns <- c("Empl.Rcd", "Position.Nbr", "Deptid", "Empl.Class", "Uw.Deptid.Descr", "Uw.Jobcode.Descr", "Uw.Dv.Job.Fte", "Uw.Comprate", "Uw.Pay.Basis")
+
+
+
+mult.appt.columns <- c("Empl.Rcd", "Position.Nbr", "Deptid", "Empl.Class", "Uw.Deptid.Descr", "Uw.Jobcode.Descr", "Uw.Dv.Job.Fte", "Uw.Comprate", "Uw.Pay.Basis") 
 
 colnames(multi.appts.ls[[1]])[colnames(multi.appts.ls[[1]]) %in% mult.appt.columns] <- 
   paste0(colnames(multi.appts.ls[[1]])[colnames(multi.appts.ls[[1]]) %in% mult.appt.columns], ".First")
@@ -87,14 +96,101 @@ colnames(multi.appts.ls[[2]])[colnames(multi.appts.ls[[2]]) %in% mult.appt.colum
 
 employment.df <- merge(employment.df, 
     multi.appts.ls[[2]][, c("Emplid", paste0(mult.appt.columns, ".Second"))], all.x=TRUE)
+# Only taking the first two appointmnents since we do not want number of columns to explode
 
 employment.df <- merge(employment.df, num.appt.df)
+employment.df <- merge(employment.df, sum.appt.df)
 # Should not need the "all" argument here, since num.appt.df should have all the id's that employment.df does
 
 #table(employment.df$num.appointments)
 
 employment.df <- employment.df[order(employment.df[, "Name"]), ]
 
+
+
+
+
+
+
+#summary(duplicated(enrollment.df[, c("HOME_ADDRESS_LINE1", "MAIL_ADDRESS_LINE1")]))
+#possible.dup.students <- enrollment.df[duplicated(enrollment.df[, c("HOME_ADDRESS_LINE1", "MAIL_ADDRESS_LINE1")]) | 
+#                     duplicated(enrollment.df[, c("HOME_ADDRESS_LINE1", "MAIL_ADDRESS_LINE1")], fromLast = TRUE), ]
+# View(possible.dup.students[order(possible.dup.students$HOME_ADDRESS_LINE1), ])
+
+program.order.tmp <- rev(names(sort(table(enrollment.df$PLAN_DESCR))))
+
+enrollment.df <- enrollment.df[order(match(enrollment.df$PLAN_DESCR, program.order.tmp)), ]
+# So most "popular" program will be considered each person's "main" program
+
+# Thanks to http://stackoverflow.com/questions/17031039/how-to-sort-a-character-vector-according-to-a-specific-order
+# x <- c("white","white","blue","green","red","blue","red")
+# y <- c("red","white","blue","green")
+# x[order(match(x, y))]
+
+
+enrollment.multi.processing.df <- enrollment.df
+
+multi.program.df <- 
+    enrollment.multi.processing.df[!duplicated(enrollment.multi.processing.df[, "EMAIL_ADDRESS"]), ]
+
+names(multi.program.df)[names(multi.program.df)=="PRIMARY_ACADEMIC_GROUP"] <- "PRIMARY_ACADEMIC_GROUP.1"
+names(multi.program.df)[names(multi.program.df)=="PLAN_DESCR"] <- "PLAN_DESCR.1"
+
+enrollment.multi.processing.df <- 
+    enrollment.multi.processing.df[ duplicated(enrollment.multi.processing.df[, "EMAIL_ADDRESS"]), ]
+
+i <- 2
+
+while (nrow(enrollment.multi.processing.df) > 0) {
+  
+  names(enrollment.multi.processing.df)[ 
+    grepl("PRIMARY_ACADEMIC_GROUP", names(enrollment.multi.processing.df))] <- 
+    paste0("PRIMARY_ACADEMIC_GROUP.", i)
+  names(enrollment.multi.processing.df)[ 
+    grepl("PLAN_DESCR", names(enrollment.multi.processing.df))] <- 
+    paste0("PLAN_DESCR.", i)
+
+  multi.program.df <- merge(multi.program.df, enrollment.multi.processing.df[, 
+    c("EMAIL_ADDRESS", paste0("PRIMARY_ACADEMIC_GROUP.", i), paste0("PLAN_DESCR.", i) )], all=TRUE)
+  
+  enrollment.multi.processing.df <- 
+    enrollment.multi.processing.df[ duplicated(enrollment.multi.processing.df[, "EMAIL_ADDRESS"]), ]
+  
+  i <- i + 1
+  
+}
+# Unlike employment, luckily we can use email addresses, since there are no ""
+
+
+#sort(table(enrollment.df$EMAIL_ADDRESS))
+#table(table(enrollment.df$EMAIL_ADDRESS, useNA = "always"))
+
+
+ paste3.pipe <- function(...,sep=";") {
+     L <- list(...)
+     L <- lapply(L,function(x) {x[is.na(x)] <- ""; x})
+     ret <-gsub(paste0("(^",sep,"|",sep,"$)"),"",
+                 gsub(paste0(sep,sep),sep,
+                      do.call(paste,c(L,list(sep=sep)))))
+     is.na(ret) <- ret==""
+     # Uses this feature (explained in the help file): "The generic function is.na<- sets elements to NA."
+     ret
+     }
+# paste3(c("a","b", "c", NA), c("A","", "", NA), c(1:3, NA)) 
+# Thanks to http://stackoverflow.com/questions/13673894/suppress-nas-in-paste
+
+multi.program.df$PRIMARY_ACADEMIC_GROUP.combined <- 
+  do.call( paste3.pipe, multi.program.df[, paste0("PRIMARY_ACADEMIC_GROUP.", 1:(i-1))])
+multi.program.df$PLAN_DESCR.combined <- 
+  do.call( paste3.pipe, multi.program.df[, paste0("PLAN_DESCR.", 1:(i-1))])
+
+rm(i)
+
+# So in fact we are eliminating _some_ info, such as info
+# about number of credits earned toward each program, but we're not too interested in that
+
+
+enrollment.df <- multi.program.df
 
 
 
@@ -148,11 +244,19 @@ membership.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", membership.df$Seconda
   fixed=TRUE) & is.na(membership.df$pure.wisc.email),
   membership.df$Secondary.Email, membership.df$pure.wisc.email)
 
+
 membership.df$composite.wisc.email <- ifelse(grepl(".wisc.edu", membership.df$Primary.Email, 
                                               fixed=TRUE), membership.df$Primary.Email, NA)
 membership.df$composite.wisc.email <- ifelse(grepl(".wisc.edu", membership.df$Secondary.Email, 
   fixed=TRUE) & is.na(membership.df$composite.wisc.email),
   membership.df$Secondary.Email, membership.df$composite.wisc.email)
+
+membership.df$non.wisc.email <- ifelse(!grepl("wisc.edu", membership.df$Primary.Email, 
+                                              fixed=TRUE) & membership.df$Primary.Email!="", membership.df$Primary.Email, NA)
+membership.df$non.wisc.email <- ifelse(!grepl("wisc.edu", membership.df$Secondary.Email, 
+  fixed=TRUE) & membership.df$Secondary.Email!="" & is.na(membership.df$pure.wisc.email),
+  membership.df$Secondary.Email, membership.df$pure.wisc.email)
+# Notice that we negate the grepl() and make sure nothing equals ""
 
 
 enrollment.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", enrollment.df$EMAIL_ADDRESS, 
@@ -161,12 +265,18 @@ enrollment.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", enrollment.df$EMAIL_A
 enrollment.df$composite.wisc.email <- ifelse(grepl(".wisc.edu", enrollment.df$EMAIL_ADDRESS, 
                                               fixed=TRUE), enrollment.df$EMAIL_ADDRESS, NA)
 
+enrollment.df$non.wisc.email <- ifelse(!grepl("wisc.edu", enrollment.df$EMAIL_ADDRESS, 
+                                              fixed=TRUE) & enrollment.df$EMAIL_ADDRESS!="", enrollment.df$EMAIL_ADDRESS, NA)
+# Again, just negation of grepl()
 
 employment.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", employment.df$Uw.Bn.Email.Addr, 
                                               fixed=TRUE), employment.df$Uw.Bn.Email.Addr, NA)
 
 employment.df$composite.wisc.email <- ifelse(grepl(".wisc.edu", employment.df$Uw.Bn.Email.Addr, 
                                               fixed=TRUE), employment.df$Uw.Bn.Email.Addr, NA)
+
+employment.df$non.wisc.email <- ifelse(!grepl("wisc.edu", employment.df$Uw.Bn.Email.Addr, 
+                                              fixed=TRUE) & employment.df$Uw.Bn.Email.Addr!="", employment.df$Uw.Bn.Email.Addr, NA)
 
 
 # employment.df$Uw.Bn.Email.Addr[is.na(employment.df$pure.wisc.email ) & is.na(employment.df$composite.wisc.email)]
@@ -328,6 +438,34 @@ membership.merge.composite.email.df <- merge.temp[!is.na(merge.temp$membership.d
 #For blah set - iterate so that each merging method replaces the merge key if its not NA
 
 
+
+# Iterative 3-way merge: - for non.wisc email
+merge.temp <- merge(enrollment.after.dedup.df[
+  !is.na(enrollment.after.dedup.df$non.wisc.email), 
+  c("non.wisc.email", "enrollment.db.id")], 
+                    membership.after.dedup.df[
+  !is.na(membership.after.dedup.df$non.wisc.email), 
+  c("non.wisc.email", "membership.db.id")], all=TRUE)
+
+merge.temp <- merge(merge.temp, 
+  employment.after.dedup.df[, c("non.wisc.email", "employment.db.id")], all=TRUE)
+
+merge.temp <- merge.temp[!is.na(merge.temp$non.wisc.email), ]
+
+# Nice summary of the status of the match as of now:
+ftable(enrol=!is.na(merge.temp$enrollment.db.id), memb=!is.na(merge.temp$membership.db.id))
+#ftable(enrol=!is.na(merge.temp$enrollment.db.id), emp=!is.na(merge.temp$employment.db.id), memb=!is.na(merge.temp$membership.db.id))
+
+enrollment.merge.non.wisc.email.df <- merge.temp[!is.na(merge.temp$enrollment.db.id), ]
+employment.merge.non.wisc.email.df <- merge.temp[!is.na(merge.temp$employment.db.id), ]
+membership.merge.non.wisc.email.df <- merge.temp[!is.na(merge.temp$membership.db.id), ]
+
+
+
+
+
+
+
 #############
 #############
 # Enrollment
@@ -341,14 +479,19 @@ colnames(enrollment.merge.pure.email.df)[grepl("enrollment", colnames(enrollment
 colnames(enrollment.merge.composite.email.df) <- paste0(colnames(enrollment.merge.composite.email.df), ".composite.email")
 colnames(enrollment.merge.composite.email.df)[grepl("enrollment", colnames(enrollment.merge.composite.email.df))] <- "enrollment.db.id"
 
+colnames(enrollment.merge.non.wisc.email.df) <- paste0(colnames(enrollment.merge.non.wisc.email.df), ".non.wisc.email")
+colnames(enrollment.merge.non.wisc.email.df)[grepl("enrollment", colnames(enrollment.merge.non.wisc.email.df))] <- "enrollment.db.id"
 
 
-enrollment.merge.master.df<- merge( merge(enrollment.merge.names.df, enrollment.merge.pure.email.df, all=TRUE), enrollment.merge.composite.email.df,  all=TRUE)
 
+enrollment.merge.master.df<- merge(merge( merge(enrollment.merge.names.df, enrollment.merge.pure.email.df, all=TRUE), enrollment.merge.composite.email.df,  all=TRUE), enrollment.merge.non.wisc.email.df,  all=TRUE)
+
+# TODO: Will this choke if there are no emails of a certain category (pure, composite, non.wisc)? No, it's ok 
+# since enrollment actually has no non-wisc now.
 
 
 table( 
-  apply(enrollment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email" )], 1, FUN=function(x) {
+  apply(enrollment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email", "membership.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
   length(unique(x)) <= 1
 } )
@@ -357,7 +500,7 @@ table(
 # then we have a problem, 
 # since the different ways of finding matches somehow do not agree
 
-enrollment.merge.master.df$membership.db.id.crossref <- apply(enrollment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email" )], 1, FUN=function(x) {
+enrollment.merge.master.df$membership.db.id.crossref <- apply(enrollment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email", "membership.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
     ifelse(length(unique(x))==1, x, NA)
 } )
@@ -369,7 +512,7 @@ enrollment.after.dedup.df <- merge(enrollment.after.dedup.df, enrollment.merge.m
 
 
 table( 
-  apply(enrollment.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email" )], 1, FUN=function(x) {
+  apply(enrollment.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email", "employment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
   length(unique(x)) <= 1
 } )
@@ -378,7 +521,7 @@ table(
 # then we have a problem, 
 # since the different ways of finding matches somehow do not agree
 
-enrollment.merge.master.df$employment.db.id.crossref <- apply(enrollment.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email" )], 1, FUN=function(x) {
+enrollment.merge.master.df$employment.db.id.crossref <- apply(enrollment.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email", "employment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
     ifelse(length(unique(x))==1, x, NA)
 } )
@@ -400,15 +543,17 @@ colnames(membership.merge.pure.email.df)[grepl("membership", colnames(membership
 colnames(membership.merge.composite.email.df) <- paste0(colnames(membership.merge.composite.email.df), ".composite.email")
 colnames(membership.merge.composite.email.df)[grepl("membership", colnames(membership.merge.composite.email.df))] <- "membership.db.id"
 
+colnames(membership.merge.non.wisc.email.df) <- paste0(colnames(membership.merge.non.wisc.email.df), ".non.wisc.email")
+colnames(membership.merge.non.wisc.email.df)[grepl("membership", colnames(membership.merge.non.wisc.email.df))] <- "membership.db.id"
 
 
 
-membership.merge.master.df<- merge( merge(membership.merge.names.df, membership.merge.pure.email.df, all=TRUE), membership.merge.composite.email.df,  all=TRUE)
+membership.merge.master.df<- merge( merge( merge(membership.merge.names.df, membership.merge.pure.email.df, all=TRUE), membership.merge.composite.email.df,  all=TRUE), membership.merge.non.wisc.email.df,  all=TRUE)
 
 
 
 table( 
-  apply(membership.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email","enrollment.db.id.composite.email" )], 1, FUN=function(x) {
+  apply(membership.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email", "enrollment.db.id.composite.email", "enrollment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
   length(unique(x)) <= 1
 } )
@@ -417,7 +562,7 @@ table(
 # then we have a problem, 
 # since the different ways of finding matches somehow do not agree
 
-membership.merge.master.df$enrollment.db.id.crossref <- apply(membership.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email","enrollment.db.id.composite.email" )], 1, FUN=function(x) {
+membership.merge.master.df$enrollment.db.id.crossref <- apply(membership.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email","enrollment.db.id.composite.email", "enrollment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
   ifelse(length(unique(x))==1, x, NA)
 } )
@@ -430,7 +575,7 @@ membership.after.dedup.df <- merge(membership.after.dedup.df, membership.merge.m
 
 
 table( 
-  apply(membership.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email" )], 1, FUN=function(x) {
+  apply(membership.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email", "employment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
   length(unique(x)) <= 1
 } )
@@ -439,7 +584,7 @@ table(
 # then we have a problem, 
 # since the different ways of finding matches somehow do not agree
 
-membership.merge.master.df$employment.db.id.crossref <- apply(membership.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email" )], 1, FUN=function(x) {
+membership.merge.master.df$employment.db.id.crossref <- apply(membership.merge.master.df[, c("employment.db.id.names", "employment.db.id.pure.email","employment.db.id.composite.email", "employment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
     ifelse(length(unique(x))==1, x, NA)
 } )
@@ -465,12 +610,15 @@ colnames(employment.merge.pure.email.df)[grepl("employment", colnames(employment
 colnames(employment.merge.composite.email.df) <- paste0(colnames(employment.merge.composite.email.df), ".composite.email")
 colnames(employment.merge.composite.email.df)[grepl("employment", colnames(employment.merge.composite.email.df))] <- "employment.db.id"
 
+colnames(employment.merge.non.wisc.email.df) <- paste0(colnames(employment.merge.non.wisc.email.df), ".non.wisc.email")
+colnames(employment.merge.non.wisc.email.df)[grepl("employment", colnames(employment.merge.non.wisc.email.df))] <- "employment.db.id"
 
-employment.merge.master.df<- merge( merge(employment.merge.names.df, employment.merge.pure.email.df, all=TRUE), employment.merge.composite.email.df,  all=TRUE)
+
+employment.merge.master.df<- merge( merge( merge(employment.merge.names.df, employment.merge.pure.email.df, all=TRUE), employment.merge.composite.email.df,  all=TRUE), employment.merge.non.wisc.email.df,  all=TRUE)
 
 
 table( 
-  apply(employment.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email","enrollment.db.id.composite.email" )], 1, FUN=function(x) {
+  apply(employment.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email","enrollment.db.id.composite.email","enrollment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
   length(unique(x)) <= 1
 } )
@@ -479,7 +627,7 @@ table(
 # then we have a problem, 
 # since the different ways of finding matches somehow do not agree
 
-employment.merge.master.df$enrollment.db.id.crossref <- apply(employment.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email","enrollment.db.id.composite.email" )], 1, FUN=function(x) {
+employment.merge.master.df$enrollment.db.id.crossref <- apply(employment.merge.master.df[, c("enrollment.db.id.names", "enrollment.db.id.pure.email","enrollment.db.id.composite.email", "enrollment.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
     ifelse(length(unique(x))==1, x, NA)
 } )
@@ -490,7 +638,7 @@ employment.after.dedup.df <- merge(employment.after.dedup.df, employment.merge.m
 
 
 table( 
-  apply(employment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email" )], 1, FUN=function(x) {
+  apply(employment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email","membership.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
   length(unique(x)) <= 1
 } )
@@ -499,7 +647,7 @@ table(
 # then we have a problem, 
 # since the different ways of finding matches somehow do not agree
 
-employment.merge.master.df$membership.db.id.crossref <- apply(employment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email" )], 1, FUN=function(x) {
+employment.merge.master.df$membership.db.id.crossref <- apply(employment.merge.master.df[, c("membership.db.id.names", "membership.db.id.pure.email","membership.db.id.composite.email","membership.db.id.non.wisc.email" )], 1, FUN=function(x) {
   x <- x[!is.na(x)]
     ifelse(length(unique(x))==1, x, NA)
 } )
@@ -521,6 +669,7 @@ master.for.goodness.of.link.df <- merge(
   by.y="enrollment.db.id.crossref", all=TRUE)
 # Will do below when employment scraper is up and running
 # master.for.goodness.of.link.df <- merge(master.for.goodness.of.link.df, employment.after.dedup.df[something], all=TRUE)
+# length(intersect(enrollment.after.dedup.df$enrollment.db.id, membership.after.dedup.df$enrollment.db.id.crossref))
 
 ftable(enrol=!is.na(master.for.goodness.of.link.df$enrollment.db.id), 
               memb=!is.na(master.for.goodness.of.link.df$membership.db.id))
@@ -655,7 +804,7 @@ employment.after.dedup.df$L_name_for_rec_linkage <- employment.after.dedup.df$L.
 
 membership.after.dedup.df$department_for_match <- membership.after.dedup.df$Department
 membership.after.dedup.df$department_for_match[membership.after.dedup.df$department_for_match==""] <- NA
-enrollment.after.dedup.df$department_for_match <- enrollment.after.dedup.df$ACAD_PLAN_LONG_DESCR
+enrollment.after.dedup.df$department_for_match <- enrollment.after.dedup.df[, "PLAN_DESCR.1"]
 enrollment.after.dedup.df$department_for_match <- gsub("( PHD)|( MS)|( MFA)|( MA)" , "", enrollment.after.dedup.df$department_for_match)
 
 employment.after.dedup.df$department_for_match <- employment.after.dedup.df$Uw.Deptid.Descr.First
@@ -1046,6 +1195,9 @@ dim( merge(membership.after.dedup.df,
            enrollment.after.dedup.df,  by="membership.enrollment.key", all.x=TRUE) )
 
 library("plyr")
+
+
+
 membership.after.dedup.df <- rename(membership.after.dedup.df, c(
   "Name"="Combined.Name.MP",
   "First.Name"="First.Name.MP",
@@ -1074,6 +1226,8 @@ membership.after.dedup.df <- rename(membership.after.dedup.df, c(
   "phone_for_match"="phone_for_match.MP",
   "address_to_match"="address_to_match.MP"))
 
+names(membership.after.dedup.df)[!grepl("([.]MP$)|(key)", names(membership.after.dedup.df))] <-
+  paste0(names(membership.after.dedup.df)[!grepl("([.]MP$)|(key)", names(membership.after.dedup.df))], ".MP")
 
 enrollment.after.dedup.df <- rename(enrollment.after.dedup.df, c(
   "NAME_LAST_PREFERRED"="Last.Name.EN",
@@ -1114,6 +1268,10 @@ enrollment.after.dedup.df <- rename(enrollment.after.dedup.df, c(
   "address_to_match"="address_to_match.EN"
 ))
 
+names(enrollment.after.dedup.df)[!grepl("([.]EN$)|(key)", names(enrollment.after.dedup.df))] <-
+  paste0(names(enrollment.after.dedup.df)[!grepl("([.]EN$)|(key)", names(enrollment.after.dedup.df))], ".EN")
+
+
 
 employment.after.dedup.df <- rename(employment.after.dedup.df, c(
   "Name"="Combined.Name.EM",
@@ -1135,8 +1293,9 @@ employment.after.dedup.df <- rename(employment.after.dedup.df, c(
 ))
 # TODO: The following `from` values were not present in `x`: Uw.Jobcode.Descr, Deptid, Uw.Deptid.Descr, Fte, UW.Pay.Rate
   
-# TODO: Probably want some error handling if not all of the columns exist in future datasets
-# 
+names(employment.after.dedup.df)[!grepl("([.]EM$)|(key)", names(employment.after.dedup.df))] <-
+  paste0(names(employment.after.dedup.df)[!grepl("([.]EM$)|(key)", names(employment.after.dedup.df))], ".EM")
+
 
 
 
@@ -1227,8 +1386,8 @@ employment.after.dedup.df$Last.Name.EM[match(
 
 
 
-d.tmp <- as.Date(enrollment.after.dedup.df$BIRTHDATE, format="%m/%d/%y")
-enrollment.after.dedup.df$BIRTHDATE.formatted <- as.Date(ifelse(d.tmp > Sys.Date(), format(d.tmp, "19%y-%m-%d"), format(d.tmp)))
+d.tmp <- as.Date(enrollment.after.dedup.df$BIRTHDATE.EN, format="%m/%d/%y")
+enrollment.after.dedup.df$BIRTHDATE.formatted.EN <- as.Date(ifelse(d.tmp > Sys.Date(), format(d.tmp, "19%y-%m-%d"), format(d.tmp)))
 # This prevents "births" in the future - i.e. it converts births after '15 to 1915 and later, not 2015 and later
 # Thanks to http://stackoverflow.com/questions/9508747/add-correct-century-to-dates-with-year-provided-as-year-without-century-y
 # hist(full.outer.merge.df$BIRTHDATE.formatted, breaks="years", las=3, cex.axis=.7 )
@@ -1242,22 +1401,55 @@ enrollment.after.dedup.df$BIRTHDATE.formatted <- as.Date(ifelse(d.tmp > Sys.Date
 # install.packages("lubridate")
 library("lubridate")
 
-enrollment.after.dedup.df$age <- year(as.period(new_interval(enrollment.after.dedup.df$BIRTHDATE.formatted, as.Date(Sys.Date()))))
+enrollment.after.dedup.df$age.EN <- year(as.period(new_interval(enrollment.after.dedup.df$BIRTHDATE.formatted.EN, as.Date(Sys.Date()))))
 # TODO: What is this warning message?: Warning message:
 # In Ops.factor(left, right) : ‘-’ not meaningful for factors
 # I can't tell what the problem is
 
+
+
+ paste3 <- function(...,sep=", ") {
+     L <- list(...)
+     L <- lapply(L,function(x) {x[is.na(x)] <- ""; x})
+     ret <-gsub(paste0("(^",sep,"|",sep,"$)"),"",
+                 gsub(paste0(sep,sep),sep,
+                      do.call(paste,c(L,list(sep=sep)))))
+     is.na(ret) <- ret==""
+     # Uses this feature (explained in the help file): "The generic function is.na<- sets elements to NA."
+     ret
+     }
+# paste3(c("a","b", "c", NA), c("A","", "", NA), c(1:3, NA)) 
+# Thanks to http://stackoverflow.com/questions/13673894/suppress-nas-in-paste
+
+
+
+
+
+
 degree.codes <- c("AUD ", "DMA ", "DNP ", "PHD ", "MA ", "MS ", "MM ", "MFA ", "MBA ", "MSB ", "ME ", "MAC ", "MSW ", "MPA ", "MFS ", "MIPA5", "NE ", "GRAD0")
 
-enrollment.after.dedup.df$degree.type.detailed <- NA
+# TODO: Ok, I fixed a lot of it, but it still needs work - run "***" below. This section will choke due to not having the plan code anymore. Maybe database definition change in underlying registar's DB? since this is no longer available?: http://webcache.googleusercontent.com/search?q=cache:QhNQCvb6urcJ:apps.infoaccess.doit.wisc.edu/infoaccess/dataviews/student%2520administration/Detail%2520and%2520Code%2520Tables/STDNT_ACADEMIC_PLAN_CODES.htm+&cd=3&hl=en&ct=clnk&gl=us&client=safari
+
+degree.codes <- gsub(" ", "", degree.codes)
+degree.codes <- c(degree.codes, "Social Work")
+
+# t(t(sort(table(enrollment.after.dedup.df$PLAN_DESCR.combined))))
+
+
+enrollment.after.dedup.df$degree.type.detailed.EN <- NA
 for (i in degree.codes) {
-  enrollment.after.dedup.df$degree.type.detailed[grepl(i, enrollment.after.dedup.df$Plan.Code.EN)] <- gsub(" ", "", i)
+  enrollment.after.dedup.df$degree.type.detailed.EN[grepl(i, enrollment.after.dedup.df$PLAN_DESCR.combined.EN)] <- 
+    paste3(enrollment.after.dedup.df$degree.type.detailed.EN[grepl(i, enrollment.after.dedup.df$PLAN_DESCR.combined.EN)], gsub(" ", "", i) )
 }
 
-enrollment.after.dedup.df$degree.type.simple <- NA
-enrollment.after.dedup.df$degree.type.simple[enrollment.after.dedup.df$degree.type.detailed %in% 
+enrollment.after.dedup.df$degree.type.detailed.EN <- gsub("Social Work", "MSW", enrollment.after.dedup.df$degree.type.detailed.EN)
+
+# *** t(t(sort(table(enrollment.after.dedup.df$PLAN_DESCR.combined.EN[is.na(enrollment.after.dedup.df$degree.type.detailed.EN)]))))
+
+enrollment.after.dedup.df$degree.type.simple.EN <- NA
+enrollment.after.dedup.df$degree.type.simple.EN[enrollment.after.dedup.df$degree.type.detailed.EN %in% 
   c("MA", "MS", "MM", "MFA", "MBA", "MSB", "ME", "MAC", "MSW", "MPA", "MFS", "MIPA5", "NE", "GRAD0") ] <- "Master's"
-enrollment.after.dedup.df$degree.type.simple[enrollment.after.dedup.df$degree.type.detailed %in% c("AUD", "DMA", "DNP", "PHD")]  <- "Doctorate"
+enrollment.after.dedup.df$degree.type.simple.EN[enrollment.after.dedup.df$degree.type.detailed.EN %in% c("AUD", "DMA", "DNP", "PHD")]  <- "Doctorate"
 
 
 # Classifying the NE (Nuclear Enginerring) one is ambiguous. Just set to master's.
@@ -1269,10 +1461,12 @@ enrollment.after.dedup.df$degree.type.simple[enrollment.after.dedup.df$degree.ty
 #PHD : DMA, AUD, DNP
 #GRAD0 : nondegree
 
-enrollment.after.dedup.df$is.intl.student <- (! enrollment.after.dedup.df$Home.Country.EN %in% c("", "United States Territory", "US Minor Outlying Islands", "Puerto Rico" ) )
+enrollment.after.dedup.df$is.intl.student.EN <- (! enrollment.after.dedup.df$HOME_COUNTRY_DESCR.EN %in% c("", "United States Territory", "US Minor Outlying Islands", "Puerto Rico", "United States", "US Territory-DO NOT USE" ) )
 # So excluding US territories from the classifoctaion of intl student here.
 # Seems there is a problem here, since none of these are
 # table(full.outer.merge.df$is.intl.student)
+# Seems like in the new database the "" missing has just 25 records - maybe it's just unknown - maybe make NA?
+#t(t(sort(table(enrollment.after.dedup.df$HOME_COUNTRY_DESCR))))
 
 
 
@@ -1286,9 +1480,9 @@ enrollment.after.dedup.df$is.intl.student <- (! enrollment.after.dedup.df$Home.C
 
 # employment.after.dedup.df
 
-membership.after.dedup.df$is.TAA.member <- TRUE
-employment.after.dedup.df$is.employed <- TRUE
-enrollment.after.dedup.df$is.enrolled <- TRUE
+membership.after.dedup.df$is.TAA.member.MP <- TRUE
+employment.after.dedup.df$is.employed.EM <- TRUE
+enrollment.after.dedup.df$is.enrolled.EN <- TRUE
 
 # TODO: Maybe set all NA's to "" to get good with googly
 # And the non-merged NA's (due to all-TRUE above) to FALSE
@@ -1339,6 +1533,7 @@ full.outer.merge.df$Last.Name.0 <- NA
 
 
 # The "precedence" code above should allow the code below to "automatically" respect precedence:
+# TODO: Do I want membership name to have greatest precedence, or enrollment? probably enrollment, right?
 
 full.outer.merge.df$First.Name.0[!is.na(full.outer.merge.df$First.Name.EM)] <- 
    gsub("(^ +)|( +$)", "", full.outer.merge.df$First.Name.EM)[!is.na(full.outer.merge.df$First.Name.EM)]
@@ -1380,37 +1575,25 @@ full.outer.merge.df <- full.outer.merge.df[
   order(full.outer.merge.df$Last.Name.0, full.outer.merge.df$First.Name.0), ]
 
 
- paste3 <- function(...,sep=", ") {
-     L <- list(...)
-     L <- lapply(L,function(x) {x[is.na(x)] <- ""; x})
-     ret <-gsub(paste0("(^",sep,"|",sep,"$)"),"",
-                 gsub(paste0(sep,sep),sep,
-                      do.call(paste,c(L,list(sep=sep)))))
-     is.na(ret) <- ret==""
-     # Uses this feature (explained in the help file): "The generic function is.na<- sets elements to NA."
-     ret
-     }
-paste3(c("a","b", "c", NA), c("A","", "", NA), c(1:3, NA)) 
-# Thanks to http://stackoverflow.com/questions/13673894/suppress-nas-in-paste
 
 # Note that we are using sep=", " for all this
 full.outer.merge.df$Home.Address.Combined.EN <- with(full.outer.merge.df,
      paste3( Home.Address.Line.1.EN, Home.Address.Line.2.EN, Home.Address.Line.3.EN, 
-       Home.Address.Line.4.EN, Home.City.EN, Home.State.EN, Home.Zip.EN, Home.Country.EN) )
+       Home.Address.Line.4.EN, Home.City.EN, Home.State.EN, Home.Zip.EN, HOME_COUNTRY_DESCR.EN) )
 
 full.outer.merge.df$Mail.Address.Combined.EN <- with(full.outer.merge.df,
      paste3( Mail.Address.Line.1.EN, Mail.Address.Line.2.EN, Mail.Address.Line.3.EN, 
-       Mail.Address.Line.4.EN, Mail.City.EN, Mail.State.EN, Mail.Zip.EN, Mail.Country.EN) )
+       Mail.Address.Line.4.EN, Mail.City.EN, Mail.State.EN, Mail.Zip.EN, MAIL_COUNTRY_DESCR.EN) )
 
-full.outer.merge.df$Address.Combined.MB <- with(full.outer.merge.df,
+full.outer.merge.df$Address.Combined.MP <- with(full.outer.merge.df,
      paste3( Address.MP, City.MP, State.MP, Zip.MP) )
 
 tail(full.outer.merge.df$Mail.Address.Line.4.EN)
 
 full.outer.merge.df$Address.0 <- NA
 
-full.outer.merge.df$Address.0[!is.na(full.outer.merge.df$Address.Combined.MB)] <- 
-  full.outer.merge.df$Address.Combined.MB[!is.na(full.outer.merge.df$Address.Combined.MB)]
+full.outer.merge.df$Address.0[!is.na(full.outer.merge.df$Address.Combined.MP)] <- 
+  full.outer.merge.df$Address.Combined.MP[!is.na(full.outer.merge.df$Address.Combined.MP)]
 full.outer.merge.df$Address.0[!is.na(full.outer.merge.df$Mail.Address.Combined.EN)] <- 
   full.outer.merge.df$Mail.Address.Combined.EN[!is.na(full.outer.merge.df$Mail.Address.Combined.EN)]
 # So the enrollment address data has precedence because it is probably more up to date than
@@ -1507,16 +1690,27 @@ t(t(table(full.outer.merge.df[full.outer.merge.df$ACAD_PLAN_LONG_DESCR=="English
 
 
 
+
+
+
+
+
+
 table(membership.after.dedup.df$membership.employment.key!="No Match w Emp")
+prop.table(table(membership.after.dedup.df$membership.employment.key!="No Match w Emp"))
 table(employment.after.dedup.df$enrollment.employment.key!="No Match w Enr")
 prop.table(table(employment.after.dedup.df$enrollment.employment.key!="No Match w Enr"))
 
 table(employment.after.dedup.df$Uw.Jobcode.Descr.First, employment.after.dedup.df$enrollment.employment.key!="No Match w Enr")
 
+View(employment.after.dedup.df[employment.after.dedup.df$enrollment.employment.key=="No Match w Enr", ])
+
 
 table(Emp = membership.after.dedup.df$membership.employment.key!="No Match w Emp", 
       Enr=membership.after.dedup.df$membership.enrollment.key!="No Match w Enr")
-
+prop.table(table(Emp = membership.after.dedup.df$membership.employment.key!="No Match w Emp", 
+      Enr=membership.after.dedup.df$membership.enrollment.key!="No Match w Enr"))
+# So about 16% of members can't be matched in either database
 
 table(Enr = employment.after.dedup.df$enrollment.employment.key!="No Match w Enr", 
       Mem=employment.after.dedup.df$membership.employment.key!="No Match w Mem")
@@ -1526,6 +1720,8 @@ table(Enr = employment.after.dedup.df$enrollment.employment.key!="No Match w Enr
 table(Emp = enrollment.after.dedup.df$enrollment.employment.key!="No Match w Emp", 
       Mem=enrollment.after.dedup.df$membership.enrollment.key!="No Match w Mem")
 
+# TODO: SLight diferences in the numbers in the lower-right corner of the three table
+# Shouldn't all three match, since it's just saying "can I find matches in BOTH other databases"?
 
 # membership.employment.key	membership.enrollment.key
 # No Match w Emp	No Match w Enr
@@ -1795,6 +1991,12 @@ summary(as.data.frame(boot.collect.df))
 
 new.employment.data.df <- read.csv(file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Employment data - Nov 2015 Records Request.csv", fileEncoding="Latin1", stringsAsFactors = FALSE)
 
+# table(new.employment.data.df$Uw.Jobcode.Descr)
+new.employment.data.df.only.TAs <- new.employment.data.df[new.employment.data.df$Uw.Jobcode.Descr %in% c("TEACH ASST STANDARD", "TEACH ASST SENIOR"),  ]
+
+length(unique(new.employment.data.df.only.TAs$Emplid))
+
+length(unique(new.employment.data.df$Emplid))
 nrow(new.employment.data.df)
 
 round(prop.table(table(table(new.employment.data.df$Emplid)))*100, 2)
@@ -1813,9 +2015,27 @@ with(new.employment.data.df, length(unique(Emplid)))
 round(100*(with(new.employment.data.df, length(unique(Emplid[Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3]))) /
   with(new.employment.data.df, length(unique(Emplid))) ), digits=2)
  
-
+# new.employment.data.df <- new.employment.data.df[!new.employment.data.df$Uw.Jobcode.Descr %in% c("PRG AST-GRADER/READER", "PRJ AST-GRADER/READER"), ]
 fte.sum.by.student.agg <- aggregate(Uw.Dv.Job.Fte ~ Emplid, data= new.employment.data.df, FUN=sum)
 # This will be a problem if there are any NA's in data received later from HR
+# summary(fte.sum.by.student.agg$Uw.Dv.Job.Fte)
+# summary(new.employment.data.df$Uw.Dv.Job.Fte)
+
+# Journal-Sentinel (JS) Milwaukee:
+ fte.sum.by.student.agg <- aggregate(Uw.Dv.Job.Fte ~ Emplid, data= new.employment.data.df[!new.employment.data.df$Uw.Jobcode.Descr %in% c("PRG AST-GRADER/READER", "PRJ AST-GRADER/READER"), ], FUN=sum)
+# This will be a problem if there are any NA's in data received later from HR
+ summary(fte.sum.by.student.agg$Uw.Dv.Job.Fte)
+ summary(new.employment.data.df$Uw.Dv.Job.Fte)
+new.employment.data.df$Uw.Comprate <- as.numeric(gsub(",", "", new.employment.data.df$Uw.Comprate))
+new.employment.data.df$compensation <- new.employment.data.df$Uw.Dv.Job.Fte * new.employment.data.df$Uw.Comprate
+compensation.by.student.agg <- aggregate(compensation ~ Emplid, data= new.employment.data.df, FUN=sum)
+summary(compensation.by.student.agg$compensation)
+compensation.by.student.agg <- aggregate(compensation ~ Emplid, data= new.employment.data.df[!new.employment.data.df$Uw.Jobcode.Descr %in% c("PRG AST-GRADER/READER", "PRJ AST-GRADER/READER"), ], FUN=sum)
+summary(compensation.by.student.agg$compensation)
+
+
+
+
 
 with(fte.sum.by.student.agg, length(Emplid[Uw.Dv.Job.Fte <= .4 &  Uw.Dv.Job.Fte >= .3]))
 nrow(fte.sum.by.student.agg)
@@ -1909,16 +2129,16 @@ with(new.employment.data.df, table(Uw.Jobcode.Descr,Uw.Pay.Basis) )
 # https://kb.wisc.edu/hrs/page.php?id=29890
 
 
-with(new.employment.data.df, table(Uw.Jobcode.Descr, Empl.Class) )
+#with(new.employment.data.df, table(Uw.Jobcode.Descr, Empl.Class) )
 
-t(t(sort(table(new.employment.data.df$Uw.Comprate))))
+#t(t(sort(table(new.employment.data.df$Uw.Comprate))))
 
-View(new.employment.data.df[new.employment.data.df$Uw.Comprate=="55,587", ])
+#View(new.employment.data.df[new.employment.data.df$Uw.Comprate=="55,587", ])
 
 
 #
 
-table(new.employment.data.df$Uw.Comprate, new.employment.data.df$Uw.Pay.Basis)
+#table(new.employment.data.df$Uw.Comprate, new.employment.data.df$Uw.Pay.Basis)
 
 
 
