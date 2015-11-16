@@ -181,7 +181,8 @@ while (nrow(enrollment.multi.processing.df) > 0) {
     grepl("PLAN_DESCR", names(enrollment.multi.processing.df))] <- 
     paste0("PLAN_DESCR.", i)
 
-  multi.program.df <- merge(multi.program.df, enrollment.multi.processing.df[, 
+  multi.program.df <- merge(multi.program.df, enrollment.multi.processing.df[
+    !duplicated(enrollment.multi.processing.df[, "EMAIL_ADDRESS"]), 
     c("EMAIL_ADDRESS", paste0("PRIMARY_ACADEMIC_GROUP.", i), paste0("PLAN_DESCR.", i) )], all=TRUE)
   
   enrollment.multi.processing.df <- 
@@ -191,6 +192,10 @@ while (nrow(enrollment.multi.processing.df) > 0) {
   
 }
 # Unlike employment, luckily we can use email addresses, since there are no ""
+
+multi.program.df[multi.program.df[, "EMAIL_ADDRESS"]=="ahspencer@wisc.edu", ]
+enrollment.df[enrollment.df[, "EMAIL_ADDRESS"]=="ahspencer@wisc.edu", ]
+enrollment.multi.processing.df[enrollment.multi.processing.df[, "EMAIL_ADDRESS"]=="ahspencer@wisc.edu", ]
 
 
 #sort(table(enrollment.df$EMAIL_ADDRESS))
@@ -1754,6 +1759,8 @@ save(employment.after.dedup.df, membership.after.dedup.df, enrollment.after.dedu
 # full.outer.merge.df[full.outer.merge.df$First.Name.0=="Esteban",]
 # membership.after.dedup.df[membership.after.dedup.df$First.Name.MP=="Esteban",]
 # enrollment.after.dedup.df[enrollment.after.dedup.df$First.Name.EN=="Esteban",]
+# full.outer.merge.df[full.outer.merge.df$Name.Master.Key=="Jian Zhang",]
+
 
 
 
