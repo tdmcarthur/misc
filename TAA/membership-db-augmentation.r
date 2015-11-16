@@ -1,7 +1,8 @@
 
 # TODO: A way to make less fragile is to always select on columns via "" subscript notation rather than $
 # DONE: TODO: SOme people have gmail accounts,etc, listed in the employment and enrollment database. Could try to match again on those
-# TODO: Maybe just have .EN, etc. after every column, not just to ones with ambiguous provenance
+# DONE: TODO: Maybe just have .EN, etc. after every column, not just to ones with ambiguous provenance
+# TODO: Probably want to exclude East Asian names from the fuzzy matching
 
 # This all is a little hack-y since I dont keep the three datasets in w big list, which would have made this more elegant
 
@@ -47,6 +48,12 @@ employment.names.split.ls <- lapply(strsplit(employment.df$Name, split=", "),
 
 employment.df <- cbind(employment.df, do.call(rbind, employment.names.split.ls) )
 
+employment.df$Uw.Deptid.Descr <- gsub("[\\]", "/", employment.df$Uw.Deptid.Descr)
+# gsub("[\\]", "/", "SMPH\\ADMIN\\NEURO GRAD PROG")
+
+employment.df$Uw.Comprate <- as.numeric(gsub(",", "", employment.df$Uw.Comprate))
+employment.df$estimated.annual.compensation.indiv.appt <- employment.df$Uw.Dv.Job.Fte * employment.df$Uw.Comprate
+
 
 num.appt.df <- as.data.frame.table(table(employment.df[, "Emplid"]))
 num.appt.df[, 1] <- as.character(num.appt.df[, 1])
@@ -55,6 +62,20 @@ colnames(num.appt.df) <- c("Emplid", "num.appointments")
 sum.appt.df <- aggregate( Uw.Dv.Job.Fte ~ Emplid, data=employment.df, FUN=sum)
 sum.appt.df[, 1] <- as.character(sum.appt.df[, 1])
 colnames(sum.appt.df) <- c("Emplid", "sum.appointment.perc")
+
+sum.compensation.df <- aggregate( estimated.annual.compensation.indiv.appt ~ Emplid, data=employment.df, FUN=sum)
+sum.compensation.df[, 1] <- as.character(sum.compensation.df[, 1])
+colnames(sum.compensation.df) <- c("Emplid", "sum.estimated.annual.compensation")
+
+num.non.salaried.df <- aggregate( Uw.Pay.Basis ~ Emplid, data=employment.df, FUN=function(x) sum(! x %in% c("A", "C"))  ) 
+# Used to be sum(grepl("GRADER", x))  ) 
+num.non.salaried.df[, 1] <- as.character(num.non.salaried.df[, 1])
+colnames(num.non.salaried.df) <- c("Emplid", "num.non.salaried.appts.held")
+
+# Ok, so non-salaried is anything that is not an academic or calendar pay basis. See:
+# https://kb.wisc.edu/page.php?id=29426
+# and:
+table(employment.df$Uw.Pay.Basis, employment.df$Uw.Jobcode.Descr)
 
 
 employment.df <- employment.df[ order(employment.df$Uw.Dv.Job.Fte, decreasing = TRUE), ]
@@ -83,7 +104,7 @@ rm(i)
 
 
 
-mult.appt.columns <- c("Empl.Rcd", "Position.Nbr", "Deptid", "Empl.Class", "Uw.Deptid.Descr", "Uw.Jobcode.Descr", "Uw.Dv.Job.Fte", "Uw.Comprate", "Uw.Pay.Basis") 
+mult.appt.columns <- c("Empl.Rcd", "Position.Nbr", "Deptid", "Empl.Class", "Uw.Deptid.Descr", "Uw.Jobcode.Descr", "Uw.Dv.Job.Fte", "Uw.Comprate", "Uw.Pay.Basis", "estimated.annual.compensation.indiv.appt") 
 
 colnames(multi.appts.ls[[1]])[colnames(multi.appts.ls[[1]]) %in% mult.appt.columns] <- 
   paste0(colnames(multi.appts.ls[[1]])[colnames(multi.appts.ls[[1]]) %in% mult.appt.columns], ".First")
@@ -98,13 +119,23 @@ employment.df <- merge(employment.df,
     multi.appts.ls[[2]][, c("Emplid", paste0(mult.appt.columns, ".Second"))], all.x=TRUE)
 # Only taking the first two appointmnents since we do not want number of columns to explode
 
+
+
 employment.df <- merge(employment.df, num.appt.df)
 employment.df <- merge(employment.df, sum.appt.df)
+employment.df <- merge(employment.df, sum.compensation.df)
+employment.df <- merge(employment.df, num.non.salaried.df)
+
 # Should not need the "all" argument here, since num.appt.df should have all the id's that employment.df does
 
 #table(employment.df$num.appointments)
 
 employment.df <- employment.df[order(employment.df[, "Name"]), ]
+
+summary(employment.df$sum.estimated.annual.compensation[employment.df$num.appointments!=employment.df$num.non.salaried.appts.held])
+# Ok so the above should tell us what people make if we take out anyone who only has non-salaried appointmnets
+summary(employment.df$num.non.salaried.appts.held)
+prop.table(table(employment.df$num.non.salaried.appts.held > 0))
 
 
 
@@ -254,9 +285,10 @@ membership.df$composite.wisc.email <- ifelse(grepl(".wisc.edu", membership.df$Se
 membership.df$non.wisc.email <- ifelse(!grepl("wisc.edu", membership.df$Primary.Email, 
                                               fixed=TRUE) & membership.df$Primary.Email!="", membership.df$Primary.Email, NA)
 membership.df$non.wisc.email <- ifelse(!grepl("wisc.edu", membership.df$Secondary.Email, 
-  fixed=TRUE) & membership.df$Secondary.Email!="" & is.na(membership.df$pure.wisc.email),
-  membership.df$Secondary.Email, membership.df$pure.wisc.email)
+  fixed=TRUE) & membership.df$Secondary.Email!="" & is.na(membership.df$non.wisc.email),
+  membership.df$Secondary.Email, membership.df$non.wisc.email)
 # Notice that we negate the grepl() and make sure nothing equals ""
+
 
 
 enrollment.df$pure.wisc.email <- ifelse(grepl("@wisc.edu", enrollment.df$EMAIL_ADDRESS, 
@@ -378,9 +410,9 @@ membership.merge.names.df <- merge.temp[!is.na(merge.temp$membership.db.id), ]
 
 #employment.after.dedup.df$pure.wisc.email <- "NOMATCH@wisc.edu"
 #employment.after.dedup.df$composite.wisc.email <- "NOMATCH@nomatch.wisc.edu"
-# Had to do this above when we didn't have the eail data for the employment records
+# Had to do this above when we didn't have the email data for the employment records
 
-# TODO: NA's for now, before we work out the webscrape.
+
 
 
 # Iterative 3-way merge:
@@ -484,10 +516,11 @@ colnames(enrollment.merge.non.wisc.email.df)[grepl("enrollment", colnames(enroll
 
 
 
+
 enrollment.merge.master.df<- merge(merge( merge(enrollment.merge.names.df, enrollment.merge.pure.email.df, all=TRUE), enrollment.merge.composite.email.df,  all=TRUE), enrollment.merge.non.wisc.email.df,  all=TRUE)
 
-# TODO: Will this choke if there are no emails of a certain category (pure, composite, non.wisc)? No, it's ok 
-# since enrollment actually has no non-wisc now.
+# DONE: TODO: Will this choke if there are no emails of a certain category (pure, composite, non.wisc)? No, it's ok 
+# since enrollment actually has no non-wisc now, and no evidence that anything is wrong.
 
 
 table( 
@@ -504,6 +537,8 @@ enrollment.merge.master.df$membership.db.id.crossref <- apply(enrollment.merge.m
   x <- x[!is.na(x)]
     ifelse(length(unique(x))==1, x, NA)
 } )
+
+
 
 enrollment.after.dedup.df <- merge(enrollment.after.dedup.df, enrollment.merge.master.df[, c("membership.db.id.crossref", "enrollment.db.id")] )
 # NOTE: Should have same number of rows in each dataset. Maybe TODO: have a nrow check here
@@ -741,8 +776,7 @@ master.for.goodness.of.link.df <- merge(
   enrollment.after.dedup.df[, c("employment.db.id.crossref", "enrollment.db.id")], 
   by.x="employment.db.id",
   by.y="employment.db.id.crossref", all=TRUE)
-# Will do below when employment scraper is up and running
-# master.for.goodness.of.link.df <- merge(master.for.goodness.of.link.df, employment.after.dedup.df[something], all=TRUE)
+
 
 ftable(enrol=!is.na(master.for.goodness.of.link.df$employment.db.id), 
               memb=!is.na(master.for.goodness.of.link.df$enrollment.db.id))
@@ -802,10 +836,14 @@ employment.after.dedup.df$F_name_for_rec_linkage <- employment.after.dedup.df$F.
 employment.after.dedup.df$L_name_for_rec_linkage <- employment.after.dedup.df$L.name.for.match.EM
 
 
+degree.code.dept.match <- c("AUD ", "DMA ", "DNP ", "PHD ", "MA ", "MS ", "MM ", "MFA ", "MBA ", "MSB ", "ME ", "MAC ", "MSW ", "MPA ", "MFS ", "MIPA5", "NE ", "GRAD0")
+degree.code.dept.match <- gsub(" ", "", degree.code.dept.match)
+degree.code.dept.match <- paste0("(", paste0(degree.code.dept.match, collapse=")|("), ")")
+
 membership.after.dedup.df$department_for_match <- membership.after.dedup.df$Department
 membership.after.dedup.df$department_for_match[membership.after.dedup.df$department_for_match==""] <- NA
 enrollment.after.dedup.df$department_for_match <- enrollment.after.dedup.df[, "PLAN_DESCR.1"]
-enrollment.after.dedup.df$department_for_match <- gsub("( PHD)|( MS)|( MFA)|( MA)" , "", enrollment.after.dedup.df$department_for_match)
+enrollment.after.dedup.df$department_for_match <- gsub(degree.code.dept.match , "", enrollment.after.dedup.df$department_for_match)
 
 employment.after.dedup.df$department_for_match <- employment.after.dedup.df$Uw.Deptid.Descr.First
 # NOTE: Using the "first" department as the department for match
@@ -815,8 +853,7 @@ employment.after.dedup.df$department_for_match <- sapply(strsplit(employment.aft
   } else {
     return(x[2])
   } } )
-# TODO: Some departments have the "escape" slash as the divider: "WSLH\\ENVIRN SC\\WATR MICRB"
-# Need to handle that.
+# DONE: TODO: Some departments have the "escape" slash as the divider: "WSLH\\ENVIRN SC\\WATR MICRB"
 
 
 employment.after.dedup.df$department_for_match <- gsub("[^ ]&[^ ]", " & ", employment.after.dedup.df$department_for_match)
@@ -874,6 +911,9 @@ est.err.by.column <- c(.10, .01, .10, .20) * 3
 #membership.after.dedup.df.decimated <- membership.after.dedup.df[, vars.to.match.on]
 #membership.after.dedup.df.decimated$department_for_match[1:640] <- NA
 
+rownames(enrollment.after.dedup.df) <- 1:nrow(enrollment.after.dedup.df)
+rownames(membership.after.dedup.df) <- 1:nrow(membership.after.dedup.df)
+# Doing this just in case the ID's that the thing spits out below are linked to actual row names rather than row position number
 
 linkage.output <- RLBigDataLinkage(
   enrollment.after.dedup.df[, vars.to.match.on], 
@@ -881,6 +921,8 @@ linkage.output <- RLBigDataLinkage(
   identity1 = enrollment.after.dedup.df$membership.enrollment.key, 
   identity2 = membership.after.dedup.df$membership.enrollment.key,
   strcmp = TRUE, strcmpfun = "jarowinkler" )
+# I thinkk that the identity arguments actually have no effect on whatever I do in the code below. 
+# I wrote some wrong code that assumed that it did something that it doesn't. Oh well.
 
 
 
@@ -888,11 +930,11 @@ rpairs.weights <- epiWeights(linkage.output, e = est.err.by.column)
 # e is the estimated error weight of each column, seems quite useful. 
 # See the documentation for info on this
 
-grouping.threshold <- 0.60
+grouping.threshold <- 0.85
 # TODO: This should be a parameter above
 
 rpairs.classified <- epiClassify(rpairs.weights, 
-	  threshold.upper=.99999999999999999, threshold.lower=grouping.threshold)
+	  threshold.upper= .99999999999999999, threshold.lower=grouping.threshold) 
 # I think putting upper threshold at .9999 means that it does not include the exact matches
 
 #getTable(rpairs.classified)
@@ -909,22 +951,26 @@ getpairs.output <- getPairs( rpairs.classified, min.weight=grouping.threshold, #
 
 getpairs.output <- getpairs.output[ !duplicated(getpairs.output$id.1) & !duplicated(getpairs.output$id.2), ]
 
-getpairs.output <- getpairs.output[ ! getpairs.output$id.1 %in% membership.after.dedup.df$membership.enrollment.key[getpairs.output$id.1] &
-                                    ! getpairs.output$id.2 %in% enrollment.after.dedup.df$membership.enrollment.key[getpairs.output$id.2], 
+#getpairs.output.test <- getpairs.output[ ! getpairs.output$id.1 %in% membership.after.dedup.df$membership.enrollment.key[getpairs.output$id.1] &
+#                                    ! getpairs.output$id.2 %in% enrollment.after.dedup.df$membership.enrollment.key[getpairs.output$id.2], 
+#                                      ]
+
+getpairs.output <- getpairs.output[ ! getpairs.output$id.1  %in% which( !is.na(enrollment.after.dedup.df$membership.enrollment.key)) &
+                                    ! getpairs.output$id.2 %in% which( !is.na(membership.after.dedup.df$membership.enrollment.key)) , 
                                       ]
 # A bit complicated piece of code to make sure that we do not overwrite the previous correct matches with estimated
-# (incorrect) matches
+# (incorrect) matches. Note that the "id.1" on getpairs.output refers to the row number of enrollment.after.dedup.df, and same for other DB.
+# Fixed it from what it was previously. The previous code (just above) was wrong.
+# #membership.after.dedup.df[membership.after.dedup.df$L_name_for_rec_linkage %in% "KREROWICZ", ]
 
-membership.after.dedup.df$enrollment.db.id.crossref[getpairs.output$id.2] <- getpairs.output$id.1
+enrollment.after.dedup.df$membership.db.id.crossref[getpairs.output$id.1] <- 
+  membership.after.dedup.df$membership.db.id[getpairs.output$id.2]
+membership.after.dedup.df$enrollment.db.id.crossref[getpairs.output$id.2] <- 
+  enrollment.after.dedup.df$enrollment.db.id[getpairs.output$id.1]
 # So insert the id values for the other database in the corresponding rows of the other database
-enrollment.after.dedup.df$membership.db.id.crossref[getpairs.output$id.1] <- getpairs.output$id.2
-
-
 
 
 # And there is no reason why we can't re-calculate the key ID numbers after doing this
-
-
 # Ok, will use name and dept for enroll-employ link and just name for membership-employ link
 
 
@@ -957,7 +1003,8 @@ rpairs.weights <- epiWeights(linkage.output, e = est.err.by.column)
 # e is the estimated error weight of each column, seems quite useful. 
 # See the documentation for info on this
 
-grouping.threshold <- 0.94
+grouping.threshold <- 0.947073
+# Based on Alex Hanna, really
 # grouping.threshold <- 0.5
 # TODO: This should be a parameter above
 
@@ -978,15 +1025,14 @@ getpairs.output <- getPairs( rpairs.classified, min.weight=grouping.threshold, #
 
 getpairs.output <- getpairs.output[ !duplicated(getpairs.output$id.1) & !duplicated(getpairs.output$id.2), ]
 
-getpairs.output <- getpairs.output[ ! getpairs.output$id.1 %in% membership.after.dedup.df$membership.employment.key[getpairs.output$id.1] &
-                                    ! getpairs.output$id.2 %in% employment.after.dedup.df$membership.employment.key[getpairs.output$id.2], 
+getpairs.output <- getpairs.output[ ! getpairs.output$id.1  %in% which( !is.na(employment.after.dedup.df$membership.employment.key)) &
+                                    ! getpairs.output$id.2 %in% which( !is.na(membership.after.dedup.df$membership.employment.key)) , 
                                       ]
-# A bit complicated piece of code to make sure that we do not overwrite the previous correct matches with estimated
-# (incorrect) matches
 
-membership.after.dedup.df$employment.db.id.crossref[getpairs.output$id.2] <- getpairs.output$id.1
-# So insert the id values for the other database in the corresponding rows of the other database
-employment.after.dedup.df$membership.db.id.crossref[getpairs.output$id.1] <- getpairs.output$id.2
+employment.after.dedup.df$membership.db.id.crossref[getpairs.output$id.1] <- 
+  membership.after.dedup.df$membership.db.id[getpairs.output$id.2]
+membership.after.dedup.df$employment.db.id.crossref[getpairs.output$id.2] <- 
+  employment.after.dedup.df$employment.db.id[getpairs.output$id.1]
 
 
 
@@ -1017,7 +1063,8 @@ rpairs.weights <- epiWeights(linkage.output, e = est.err.by.column)
 # e is the estimated error weight of each column, seems quite useful. 
 # See the documentation for info on this
 
-grouping.threshold <- 0.98
+grouping.threshold <- 0.939639
+# Based on capturing DAWSON-ELLI
 # TODO: This should be a parameter above
 # TODO: Probably should increase this substantially
 
@@ -1038,15 +1085,15 @@ getpairs.output <- getPairs( rpairs.classified, min.weight=grouping.threshold, #
 
 getpairs.output <- getpairs.output[ !duplicated(getpairs.output$id.1) & !duplicated(getpairs.output$id.2), ]
 
-getpairs.output <- getpairs.output[ ! getpairs.output$id.1 %in% enrollment.after.dedup.df$enrollment.employment.key[getpairs.output$id.1] &
-                                    ! getpairs.output$id.2 %in% employment.after.dedup.df$enrollment.employment.key[getpairs.output$id.2], 
-                                      ]
-# A bit complicated piece of code to make sure that we do not overwrite the previous correct matches with estimated
-# (incorrect) matches
 
-enrollment.after.dedup.df$employment.db.id.crossref[getpairs.output$id.2] <- getpairs.output$id.1
-# So insert the id values for the other database in the corresponding rows of the other database
-employment.after.dedup.df$enrollment.db.id.crossref[getpairs.output$id.1] <- getpairs.output$id.2
+getpairs.output <- getpairs.output[ ! getpairs.output$id.1  %in% which( !is.na(employment.after.dedup.df$enrollment.employment.key)) &
+                                    ! getpairs.output$id.2 %in% which( !is.na(enrollment.after.dedup.df$enrollment.employment.key)) , 
+                                      ]
+
+employment.after.dedup.df$enrollment.db.id.crossref[getpairs.output$id.1] <- 
+  enrollment.after.dedup.df$enrollment.db.id[getpairs.output$id.2]
+enrollment.after.dedup.df$employment.db.id.crossref[getpairs.output$id.2] <- 
+  employment.after.dedup.df$employment.db.id[getpairs.output$id.1]
 
 
 
@@ -1340,6 +1387,7 @@ employment.after.dedup.df$Last.Name.OLD.EM <- employment.after.dedup.df$Last.Nam
 #merge(membership.after.dedup.df[ , c("membership.enrollment.key", "First.Name.MP")], 
 #      enrollment.after.dedup.df[ , c("membership.enrollment.key", "First.Name.EN")])
 
+# TODO: Want to change precedence to "Among EN-MP matches, EN name has precedence"
 # Ok, giving names precedence if they are different in the database.
 # Among EN-MP matches, MP name has precedence
 # Among EM-MP matches, MP name has precedence
@@ -1484,8 +1532,8 @@ membership.after.dedup.df$is.TAA.member.MP <- TRUE
 employment.after.dedup.df$is.employed.EM <- TRUE
 enrollment.after.dedup.df$is.enrolled.EN <- TRUE
 
-# TODO: Maybe set all NA's to "" to get good with googly
-# And the non-merged NA's (due to all-TRUE above) to FALSE
+# Decided not to do this: TODO: Maybe set all NA's to "" to get good with googly
+
 
 
 write.csv(employment.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Employment final database.csv", row.names=FALSE, fileEncoding="Latin1")
@@ -1498,9 +1546,9 @@ write.csv(enrollment.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA wor
 
 
 
-full.outer.merge.df <- merge(enrollment.after.dedup.df, 
-      merge(employment.after.dedup.df, membership.after.dedup.df, by="membership.employment.key", all=TRUE),
-      by="enrollment.employment.key", all=TRUE ) 
+#full.outer.merge.df <- merge(enrollment.after.dedup.df, 
+#      merge(employment.after.dedup.df, membership.after.dedup.df, by="membership.employment.key", all=TRUE),
+#      by="enrollment.employment.key", all=TRUE ) 
 # Ok, so this last "by=" argument would involve which merge key we have the
 # most confidence in. Choosing enrollment.employment.key for now.
 # Outcome looks like:
@@ -1509,11 +1557,91 @@ full.outer.merge.df <- merge(enrollment.after.dedup.df,
 # for this reason.
 
 table(full.outer.merge.df$membership.enrollment.key.x==full.outer.merge.df$membership.enrollment.key.y)
-# It appears that there is no inconsistence arising from which direction we go
+# It appears that there is no inconsistency arising from which direction we go
 # (clockwise or counter-clockwise) around the circle network, since these are all TRUE.
+# Ok, they are no longer all TRUE
+# TODO: Wait, The peoblem that I had in mind wasn't even the problem above. Try this line of code:
+# full.outer.merge.df[which(full.outer.merge.df$membership.enrollment.key.x!=full.outer.merge.df$membership.enrollment.key.y), c("membership.enrollment.key.y", "membership.enrollment.key.x")]
+
+full.outer.merge.keys.df <- merge(membership.after.dedup.df[, c("membership.db.id.MP", "membership.enrollment.key")],
+  merge(enrollment.after.dedup.df[, c("enrollment.db.id.EN", "enrollment.employment.key", "membership.enrollment.key")], 
+      merge(employment.after.dedup.df[, c("employment.db.id.EM", "membership.employment.key", "enrollment.employment.key")], 
+            membership.after.dedup.df[, c("membership.db.id.MP", "membership.employment.key")], by="membership.employment.key", all=TRUE),
+      by="enrollment.employment.key", all=TRUE ) ,
+  by="membership.enrollment.key", all=TRUE ) 
+
+# Just need to make sure that we match on all three keys, here, so three merges with "four" datasets
+#table(full.outer.merge.df$membership.db.id.MP.x == full.outer.merge.df$membership.db.id.MP.y)
+#table(is.na(full.outer.merge.df$membership.db.id.MP.x) == is.na(full.outer.merge.df$membership.db.id.MP.y))
+
+#with(full.outer.merge.df, ftable(membership.enrollment=is.na(membership.enrollment.key),  
+#                                 enrollment.employment=is.na(enrollment.employment.key), 
+#                                 membership.employment=is.na(membership.employment.key)) )
+
+#with(full.outer.merge.df, ftable(x=is.na(membership.db.id.MP.x),  
+#                                 y=is.na(membership.db.id.MP.y)) )
+
+#View(full.outer.merge.df[sample(1:nrow(full.outer.merge.df), size = 50, replace=F), ])
+
+#with(full.outer.merge.df, full.outer.merge.df[membership.db.id.MP.x %in% 406 | membership.db.id.MP.y %in% 406 , ])
+#row.check.test <- 300 ; with(full.outer.merge.df, full.outer.merge.df[membership.db.id.MP.x %in% row.check.test | membership.db.id.MP.y %in% row.check.test , ])
+
+table(duplicated(full.outer.merge.keys.df))
+
+circular.merge.ls <- list()
+
+for (targ.record in na.exclude(unique(full.outer.merge.keys.df$membership.db.id.MP.x, full.outer.merge.keys.df$membership.db.id.MP.y))) {
+  # I don't think I have to specify both "x" and "y" above, but doing it just in case.
+#  cat(sum(full.outer.merge.keys.df$membership.db.id.MP.x %in% targ.record | full.outer.merge.keys.df$membership.db.id.MP.y %in% targ.record), "\n")
+  if (sum(full.outer.merge.keys.df$membership.db.id.MP.x %in% targ.record | full.outer.merge.keys.df$membership.db.id.MP.y %in% targ.record)>2) cat("CHECK CODE!\n")
+  
+  circular.merge.ls[[as.character(targ.record)]] <- as.data.frame( lapply(full.outer.merge.keys.df[full.outer.merge.keys.df$membership.db.id.MP.x %in% targ.record | 
+                                                             full.outer.merge.keys.df$membership.db.id.MP.y %in% targ.record, ], FUN=function(x) {
+                                                               if( sum(!is.na(x))>1 && !all(grepl("No Match", x)) ) {
+                                                                 cat("PROBLEM!\n") # Should probably throw an error here
+                                                                 stop()
+                                                               }
+                                                               x <- x[!is.na(x)]
+                                                               if (length(x)==0) x <- NA
+                                                               x } ))
+}
+# Basically, we need to take the rows that have the non-NA's
+# This is fairly complicated code, but we need it
+
+circular.merge.df <- do.call(rbind, circular.merge.ls)
+
+full.outer.merge.keys.df <- full.outer.merge.keys.df[
+  is.na(full.outer.merge.keys.df$membership.db.id.MP.x) & is.na(full.outer.merge.keys.df$membership.db.id.MP.y), ]
+
+full.outer.merge.keys.df <- rbind(full.outer.merge.keys.df, circular.merge.df)
+
+
+full.outer.merge.keys.df[duplicated(full.outer.merge.keys.df[, c("enrollment.db.id.EN", "employment.db.id.EM", "membership.db.id.MP")]) | 
+                           duplicated(full.outer.merge.keys.df[, c("enrollment.db.id.EN", "employment.db.id.EM", "membership.db.id.MP")], fromLast = T), ]
 
 
 
+full.outer.merge.keys.df <- full.outer.merge.keys.df[, colnames(full.outer.merge.keys.df)!="membership.db.id.MP.y"]
+colnames(full.outer.merge.keys.df)[colnames(full.outer.merge.keys.df)=="membership.db.id.MP.x"] <- "membership.db.id.MP"
+
+
+full.outer.merge.keys.df <- full.outer.merge.keys.df[, c("enrollment.db.id.EN", "employment.db.id.EM", "membership.db.id.MP")]
+
+table(duplicated(full.outer.merge.keys.df))
+# This is only because we have "No Match w Mem" and "No Match w Enr" in the same column (see 
+# a few lines above). can just get rid of this
+# with no consequences:
+full.outer.merge.keys.df <- full.outer.merge.keys.df[!duplicated(full.outer.merge.keys.df), ]
+
+
+intersect(names(full.outer.merge.keys.df), names( enrollment.after.dedup.df ))
+full.outer.merge.df <- merge(full.outer.merge.keys.df, enrollment.after.dedup.df, by="enrollment.db.id.EN", all=TRUE)
+
+intersect(names(full.outer.merge.keys.df), names( employment.after.dedup.df ))
+full.outer.merge.df <- merge(full.outer.merge.df, employment.after.dedup.df, by="employment.db.id.EM", all=TRUE)
+
+intersect(names(full.outer.merge.keys.df), names( membership.after.dedup.df ))
+full.outer.merge.df <- merge(full.outer.merge.df, membership.after.dedup.df, by="membership.db.id.MP", all=TRUE)
 
 
 
@@ -1602,18 +1730,30 @@ full.outer.merge.df$Address.0[!is.na(full.outer.merge.df$Mail.Address.Combined.E
 # Not sure why we are still getting the commas between empty strings, but I don't care enough
 # to fix it now
 
-# TODO: convert all missing values to ""
 
 
+table(is.na(full.outer.merge.df$enrollment.employment.key))
+table(duplicated(full.outer.merge.df$Name.Master.Key))
 
 
+table(duplicated(full.outer.merge.df$Name.Master.Key))
+#View(full.outer.merge.df[duplicated(full.outer.merge.df$Name.Master.Key) | duplicated(full.outer.merge.df$Name.Master.Key, fromLast = T), ])
+table(duplicated(full.outer.merge.df))
+# I'm not really sure why these are completely duplicated, but 
 
-write.csv(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.csv", row.names=FALSE, fileEncoding="Latin1")
-
-# TODO: I should really have an R format output, too
-
+write.csv(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.csv", row.names=FALSE, fileEncoding="UTF-8")
+# fileEncoding="Latin1"
 # , na=""
 
+save(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.Rdata")
+save(employment.after.dedup.df, membership.after.dedup.df, enrollment.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Enr Emp Mem as separate databases.Rdata")
+
+
+
+
+# full.outer.merge.df[full.outer.merge.df$First.Name.0=="Esteban",]
+# membership.after.dedup.df[membership.after.dedup.df$First.Name.MP=="Esteban",]
+# enrollment.after.dedup.df[enrollment.after.dedup.df$First.Name.EN=="Esteban",]
 
 
 
