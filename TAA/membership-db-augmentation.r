@@ -229,6 +229,58 @@ rm(i)
 enrollment.df <- multi.program.df
 
 
+sort(table(enrollment.df$TERM_DESCR))
+
+# Want to produce two fields: number of semesters of enrollment (including summer, and including 
+# current semester (i.e. no one will have zero semesters))
+# And second field: date enrolled
+
+# Assumed semester start dates:
+# January 20
+# June 1
+# Sept 1
+
+# Earliest matriculation date in the datbase of currently enrolled students: 
+# enrollment.df[enrollment.df$TERM_DESCR=="Fall 1971-72", ]
+# It seems that the TERM_DESCR specifies first enrollment (possibly in undergrad), not enrollment in a particular program
+# I had this exchange via email:
+# Of the 9231 graduate students enrolled this semester, 1446 have a bachelor’s degree 
+# from UW-Madison.  So about 16%.  Does that answer your question?
+# Mary-Butler Ravneberg
+# Policy & Planning Analyst
+# Graduate School
+
+# In the 90's the summer semster was listed as "Summer 1996-97", but in 2000's started just listing it as
+# "Summer 2000". "Summer 1996-97" means summer of '97  See https://admindev.engr.wisc.edu/student_info/index_retention.php
+
+spring.slice <- gsub(".+-", "", enrollment.df$TERM_DESCR[grepl("Spring", enrollment.df$TERM_DESCR)])
+spring.slice[nchar(spring.slice)==2] <- paste0("19", spring.slice[nchar(spring.slice)==2])
+spring.slice <- as.Date(paste0(spring.slice, "-1-20"))
+
+fall.slice <- gsub("(.+ )|(-.+)", "", enrollment.df$TERM_DESCR[grepl("Fall", enrollment.df$TERM_DESCR)])
+fall.slice <- as.Date(paste0(fall.slice, "-9-1"))
+
+summer.slice <- gsub("(.+ )|(.+-)", "", enrollment.df$TERM_DESCR[grepl("Summer", enrollment.df$TERM_DESCR)])
+summer.slice[nchar(summer.slice)==2] <- paste0("19", summer.slice[nchar(summer.slice)==2])
+summer.slice <- as.Date(paste0(summer.slice, "-6-1"))
+
+enrollment.df$matriculation.date <- as.Date(NA) 
+# Need to do this rather than just NA assignment, or else it is just coerced to numeric later on
+enrollment.df$matriculation.date[grepl("Spring", enrollment.df$TERM_DESCR)] <- spring.slice
+enrollment.df$matriculation.date[grepl("Fall", enrollment.df$TERM_DESCR)] <- fall.slice
+enrollment.df$matriculation.date[grepl("Summer", enrollment.df$TERM_DESCR)] <- summer.slice
+
+# num.semester.counter <- as.Date(paste0(rep(1900:year(as.Date(Sys.Date())), each=3), c("-1-21", "-6-2", "-9-2" )) )
+# change to the above if want to count summer semester as a semester
+num.semester.counter <- as.Date(paste0(rep(1900:year(as.Date(Sys.Date())), each=2), c("-1-21", "-9-2" )) )
+num.semester.counter <- num.semester.counter[num.semester.counter < as.Date(Sys.Date())]
+
+enrollment.df$num.semesters.enrolled<- sapply(enrollment.df$matriculation.date, FUN=function(x) {
+  length(num.semester.counter[num.semester.counter > x])
+} )
+
+
+
 
 
 # Setting all names to upper so comparison is easier below
@@ -1439,7 +1491,8 @@ employment.after.dedup.df$Last.Name.EM[match(
 
 
 
-d.tmp <- as.Date(enrollment.after.dedup.df$BIRTHDATE.EN, format="%m/%d/%y")
+d.tmp <- as.Date(enrollment.after.dedup.df$BIRTHDATE.EN, format="%d-%b-%y") # , format="%m/%d/%y")
+# TODO: need to check this for correct formatting - make the Excel is messing things up
 enrollment.after.dedup.df$BIRTHDATE.formatted.EN <- as.Date(ifelse(d.tmp > Sys.Date(), format(d.tmp, "19%y-%m-%d"), format(d.tmp)))
 # This prevents "births" in the future - i.e. it converts births after '15 to 1915 and later, not 2015 and later
 # Thanks to http://stackoverflow.com/questions/9508747/add-correct-century-to-dates-with-year-provided-as-year-without-century-y
@@ -1458,6 +1511,13 @@ enrollment.after.dedup.df$age.EN <- year(as.period(new_interval(enrollment.after
 # TODO: What is this warning message?: Warning message:
 # In Ops.factor(left, right) : ‘-’ not meaningful for factors
 # I can't tell what the problem is
+
+enrollment.after.dedup.df$age.at.matriculation <- year(as.period(new_interval(start=enrollment.after.dedup.df$BIRTHDATE.formatted.EN, end=enrollment.after.dedup.df$matriculation.date)))
+
+prop.table(table(enrollment.after.dedup.df$age.at.matriculation < 22))
+# This is greater than the 16% that the admin (Ravneberg) quotes to us above on UW grad students who have a UW degree.
+
+enrollment.after.dedup.df$enrollment.date.is.before.age.22 <-  enrollment.after.dedup.df$age.at.matriculation < 22
 
 
 
