@@ -1501,7 +1501,13 @@ enrollment.after.dedup.df$BIRTHDATE.formatted.EN <- as.Date(ifelse(d.tmp > Sys.D
 # Wow. Like log-triangular. http://ecolego.facilia.se/ecolego/show/Log-Triangular%20Distribution
 # http://www.minem.gob.pe/minem/archivos/file/dgaam/publicaciones/curso_cierreminas/02_Técnico/03_Calidad%20de%20Aguas/TecCalAg-L4_GoldSim_App%20A-B.pdf
 # summary(full.outer.merge.df$BIRTHDATE.formatted)
+# 
+#barplot( table(yday(enrollment.after.dedup.df$BIRTHDATE.formatted.EN)), las=3, cex.axis=.7 )
+#barplot( table(wday(enrollment.after.dedup.df$BIRTHDATE.formatted.EN)), las=3, cex.axis=.7 )
 
+#densityPlot( yday(enrollment.after.dedup.df$BIRTHDATE.formatted.EN),, bw=3, las=3, cex.axis=.7 )
+
+#sort(table(yday(enrollment.after.dedup.df$BIRTHDATE.formatted.EN)))
 
 
 # install.packages("lubridate")
@@ -1813,6 +1819,7 @@ write.csv(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad
 save(full.outer.merge.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem.Rdata")
 save(employment.after.dedup.df, membership.after.dedup.df, enrollment.after.dedup.df, file="/Users/travismcarthur/Desktop/TAA work/Grad student database/Enr Emp Mem as separate databases.Rdata")
 
+# load("/Users/travismcarthur/Desktop/TAA work/Grad student database/Enr Emp Mem as separate databases version 11-16-15.Rdata")
 
 
 
@@ -2762,6 +2769,178 @@ t(t(with(enrollment.df[enrollment.df$ACAD_PLAN_LONG_DESCR=="Agricultural & Appl 
 
 t(t(with(enrollment.df[enrollment.df$ACAD_PLAN_LONG_DESCR %in%
     c("Agricultural & Appl Econ MA",  "Agricultural & Appl Econ MS", "Agricultural & Appl Econ PHD"), ], prop.table(table(Country)))))
+
+
+
+
+# Produces table of number of students who came to fair grad pay rally, by degree program / department
+
+load("/Users/travismcarthur/Desktop/TAA work/Grad student database/Outer merge Enr Emp Mem version 11-16-15.Rdata")
+
+
+rally.names.df <- read.csv("/Users/travismcarthur/Desktop/TAA work/Grad student database/fair grad pay Rally Names.csv", stringsAsFactor=FALSE, header=TRUE, fileEncoding="Latin1")
+
+rally.names.ls <- as.list(rally.names.df)
+
+rally.names.ls <- lapply(rally.names.ls, FUN=function(x) x[x!=""])
+
+rally.names.ls <- lapply(rally.names.ls, FUN=function(x) gsub(" .+ ", " ", x)  )
+
+rally.participants.df <- merge(full.outer.merge.df[, c("Name.Master.Key", "PLAN_DESCR.combined.EN")], data.frame(Name.Master.Key=rally.names.ls[["YES"]]))
+
+t(t(sort(table(rally.participants.df$PLAN_DESCR.combined.EN), decreasing = TRUE)))
+
+rally.interested.df <- merge(full.outer.merge.df[, c("Name.Master.Key", "PLAN_DESCR.combined.EN")], data.frame(Name.Master.Key=rally.names.ls[["INTERESTED"]]))
+
+t(t(sort(table(rally.interested.df$PLAN_DESCR.combined.EN), decreasing = TRUE)))
+
+
+
+# TODO: make combined dept for the employment data
+
+full.outer.merge.df$Uw.Deptid.Descr.combined <- do.call(paste, full.outer.merge.df[, grepl("Uw.Deptid.Descr", colnames(full.outer.merge.df))])
+
+# TAs being employed by math department, by academic department
+
+set.of.math.tas.by.dept <- with(full.outer.merge.df, full.outer.merge.df$PLAN_DESCR.combined.EN[
+  (grepl("L&S/MATHEMATICS/MATH", Uw.Deptid.Descr.First.EM) & grepl("TEACH ASST", Uw.Jobcode.Descr.First.EM) ) | 
+        (grepl("L&S/MATHEMATICS/MATH", Uw.Deptid.Descr.Second.EM) & grepl("TEACH ASST", Uw.Jobcode.Descr.Second.EM) )]) 
+                                                        
+                                                        
+t(t(sort(table(set.of.math.tas.by.dept ), decreasing = TRUE)))
+
+round(prop.table(t(t(sort(table(set.of.math.tas.by.dept ), decreasing = TRUE))))*100, digits=1)
+
+
+with(full.outer.merge.df, full.outer.merge.df[
+  ((grepl("L&S/MATHEMATICS/MATH", Uw.Deptid.Descr.First.EM) & grepl("TEACH ASST", Uw.Jobcode.Descr.First.EM) ) | 
+        (grepl("L&S/MATHEMATICS/MATH", Uw.Deptid.Descr.Second.EM) & grepl("TEACH ASST", Uw.Jobcode.Descr.Second.EM) )) &
+    PLAN_DESCR.combined.EN %in% c("Curriculum and Instruction PHD", "Educational Policy Studies PHD"), 
+    c("Name.Master.Key", "PLAN_DESCR.combined.EN")]) 
+
+
+
+
+# ECE appointment percentages
+
+library("stringr")
+
+with(full.outer.merge.df[ grepl("Electrical Engineering", full.outer.merge.df$PLAN_DESCR.combined.EN) , ],  {
+  tmp <- str_extract_all(PLAN_DESCR.combined.EN[order(sum.appointment.perc.EM)], 
+                         "(Electrical Engineering PHD)|(Electrical Engineering MS)", simplify = FALSE)
+  tmp <- sapply(tmp, FUN=paste, collapse=";")
+  tmp <- gsub("Electrical Engineering", "EE", tmp)
+  table(sum.appt.perc=sum.appointment.perc.EM[order(sum.appointment.perc.EM)], degree=tmp)
+}
+)
+# A kind of complicated piece of code to strip out all the other degrees that people may be enrolled in
+
+
+
+
+
+enrollment.file.location <- "/Users/travismcarthur/Desktop/TAA work/Grad student database/taa_fall 2015.csv"
+enrollment.df <- read.csv(enrollment.file.location, stringsAsFactor=FALSE, fileEncoding="Latin1")
+
+t(t(sort(table(enrollment.df$PLAN_DESCR), decreasing = TRUE)))
+t(t(sort(table(full.outer.merge.df$PLAN_DESCR.combined.EN), decreasing = TRUE)))
+
+
+
+paste3 <- function(...,sep=", ") {
+     L <- list(...)
+     L <- lapply(L,function(x) {x[is.na(x)] <- ""; x})
+     ret <-gsub(paste0("(^",sep,"|",sep,"$)"),"",
+                 gsub(paste0(sep,sep),sep,
+                      do.call(paste,c(L,list(sep=sep)))))
+     is.na(ret) <- ret==""
+     # Uses this feature (explained in the help file): "The generic function is.na<- sets elements to NA."
+     ret
+}
+
+
+# Appointments for electrical engineering students, by employing department
+
+with(full.outer.merge.df[ grepl("Electrical Engineering", full.outer.merge.df$PLAN_DESCR.combined.EN) , ],  {
+  tmp1 <- c(Uw.Deptid.Descr.First.EM, Uw.Deptid.Descr.Second.EM)
+  tmp2 <- c(Uw.Dv.Job.Fte.First.EM, Uw.Dv.Job.Fte.Second.EM)
+  table(employing.dept=tmp1, appt.perc=cut(tmp2, seq(0, .7, by=.1), include.lowest = TRUE))
+}
+)
+
+
+table(full.outer.merge.df$num.appointments.EM[ grepl("Electrical Engineering", full.outer.merge.df$PLAN_DESCR.combined.EN)])
+
+
+table(full.outer.merge.df$num.appointments.EM[ grepl("Electrical Engineering", full.outer.merge.df$PLAN_DESCR.combined.EN)],
+      non.salaried=full.outer.merge.df$num.non.salaried.appts.held.EM[ grepl("Electrical Engineering", full.outer.merge.df$PLAN_DESCR.combined.EN)])
+
+
+
+# >50% appointments by job type
+
+paste3 <- function(...,sep=", ") {
+     L <- list(...)
+     L <- lapply(L,function(x) {x[is.na(x)] <- ""; x})
+     ret <-gsub(paste0("(^",sep,"|",sep,"$)"),"",
+                 gsub(paste0(sep,sep),sep,
+                      do.call(paste,c(L,list(sep=sep)))))
+     is.na(ret) <- ret==""
+     # Uses this feature (explained in the help file): "The generic function is.na<- sets elements to NA."
+     ret
+}
+
+
+table(full.outer.merge.df$sum.appointment.perc.EM>.5)
+
+with(full.outer.merge.df[full.outer.merge.df$sum.appointment.perc.EM > .5, ],
+  t(t(sort(table(paste3(Uw.Jobcode.Descr.First.EM, Uw.Jobcode.Descr.Second.EM, sep=";")), decreasing = TRUE)))
+)
+
+
+
+
+
+cat(t(t(unique(sort(full.outer.merge.df$Uw.Jobcode.Descr.First.EM)))), sep="\n")
+
+
+t(t(table(full.outer.merge.df$sum.appointment.perc.EM[full.outer.merge.df$is.intl.student.EN])))
+
+
+
+t(t(table(full.outer.merge.df$sum.appointment.perc.EM[full.outer.merge.df$is.intl.student.EN] > .5)))
+
+t(t(table(full.outer.merge.df$sum.appointment.perc.EM[
+  full.outer.merge.df$is.intl.student.EN & !is.na(full.outer.merge.df$is.intl.student.EN) ] > .5 )))
+
+
+with( full.outer.merge.df[ full.outer.merge.df$sum.appointment.perc.EM > .5 & 
+  full.outer.merge.df$is.intl.student.EN ,  ], {
+  t(t(table(Uw.Jobcode.Descr.First.EM ))) }
+)
+
+
+with( full.outer.merge.df[ full.outer.merge.df$sum.appointment.perc.EM > .5 & 
+  full.outer.merge.df$is.intl.student.EN ,  ], {
+  t(t(table(Uw.Dv.Job.Fte.First.EM, Uw.Jobcode.Descr.First.EM ))) }
+)
+
+
+full.outer.merge.df$Jobcode.Decr.combined <- paste3(full.outer.merge.df$Uw.Jobcode.Descr.First.EM,
+                                                    full.outer.merge.df$Uw.Jobcode.Descr.Second.EM, sep=";")
+
+
+with( full.outer.merge.df[ full.outer.merge.df$sum.appointment.perc.EM > .5 & 
+  full.outer.merge.df$is.intl.student.EN ,  ], {
+  t(t(table(Jobcode.Decr.combined ))) }
+)
+
+
+
+
+t(table(full.outer.merge.df$Uw.Dv.Job.Fte.First.EM[full.outer.merge.df$is.intl.student.EN] > .5,
+          full.outer.merge.df$Uw.Jobcode.Descr.First.EM[full.outer.merge.df$is.intl.student.EN]))
+
 
 
 
