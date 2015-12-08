@@ -106,9 +106,9 @@ temperature.df <- temperature.df[temperature.df$STATION_NAME== "MADISON DANE CO 
 additional.temp.data <- data.frame(
   STATION= "GHCND:USW00014837",
   STATION_NAME = "MADISON DANE CO REGIONAL AIRPORT WI US",
-  DATE= as.Date(paste0("2015-11-", 25:28), format = "%Y-%m-%d"),
-  TMAX= c( 7.8, 12.8,  2.2,  0.0) * 10,
-  TMIN= c( 5.6,  2.2, -2.8, -6.1) * 10,
+  DATE= as.Date(paste0("2015-11-", 25:30), format = "%Y-%m-%d"),
+  TMAX= c( 7.8, 12.8,  2.2,  0.0,  2.8, 4.4) * 10,
+  TMIN= c( 5.6,  2.2, -2.8, -6.1, -8.3, 0.6) * 10,
   TOBS=NA, stringsAsFactors=FALSE)
 # Source: http://w1.weather.gov/data/obhistory/metric/KMSN.html
 
