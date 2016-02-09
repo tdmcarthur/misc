@@ -1,5 +1,5 @@
 
-
+current.date <- as.Date("2015-12-24")
 
 enso.1950 <- read.table("http://www.esrl.noaa.gov/psd/data/correlation/mei.data", sep="", nrows= 2015-1950+1, skip=1,  header=FALSE)
 #enso.1950[, 1] <- as.character(enso.1950[, 1])
@@ -106,14 +106,14 @@ temperature.df <- temperature.df[temperature.df$STATION_NAME== "MADISON DANE CO 
 additional.temp.data <- data.frame(
   STATION= "GHCND:USW00014837",
   STATION_NAME = "MADISON DANE CO REGIONAL AIRPORT WI US",
-  DATE= as.Date(paste0("2015-11-", 25:30), format = "%Y-%m-%d"),
-  TMAX= c( 7.8, 12.8,  2.2,  0.0,  2.8, 4.4) * 10,
-  TMIN= c( 5.6,  2.2, -2.8, -6.1, -8.3, 0.6) * 10,
+  DATE= as.Date(paste0("2015-12-", 21:24), format = "%Y-%m-%d"),
+  TMAX= c( 5.0, 2.8,  12.8,  1.1) * 10,
+  TMIN= c( 0.6,  0.0, 1.7, -0.6 ) * 10,
   TOBS=NA, stringsAsFactors=FALSE)
 # Source: http://w1.weather.gov/data/obhistory/metric/KMSN.html
 
 
-temperature.df <- rbind(temperature.df, additional.temp.data)
+ temperature.df <- rbind(temperature.df, additional.temp.data)
 
 
 temperature.df$TMAX <- temperature.df$TMAX / 10
@@ -200,8 +200,8 @@ closure.dates.df$days.to.closure <- round(as.numeric(closure.dates.df$days.to.cl
 
 #summary(lm(days.to.closure ~ season, data=closure.dates.df))
 
-enso.months <- seq(1, 10)
-nao.months <- seq(1, 10)
+enso.months <- seq(1, 11)
+nao.months <- seq(1, 11)
 
 
 enso.year.agg <- aggregate(enso ~ year + month , data=enso.merged[enso.merged$month %in% enso.months, ], FUN=mean, na.rm=TRUE)
@@ -263,7 +263,7 @@ closure.dates.df.4 <- merge(closure.dates.df.4, DD.df, all=TRUE)
 
 
 FDD.agg <- by(closure.dates.df.3.agg, INDICES=list(closure.dates.df.3.agg$season), FUN=function(x) {
-  targ.indices <- x$DATE <= as.Date(gsub("2015", year(x$begin.season.date[1]), as.character(Sys.Date()))) & 
+  targ.indices <- x$DATE <= as.Date(gsub("2015", year(x$begin.season.date[1]), as.character(current.date))) & 
                                            x$DATE >=  x$begin.season.date
 #  cat(sum(targ.indices), "\n")
 #  targ.temps <- x$t.mean[targ.indices]
@@ -277,7 +277,7 @@ FDD.df <- data.frame(FDD.to.today = as.vector(FDD.agg), season=names(FDD.agg))
 closure.dates.df.4 <- merge(closure.dates.df.4, FDD.df, all=TRUE)
 
 DD.agg <- by(closure.dates.df.3.agg, INDICES=list(closure.dates.df.3.agg$season), FUN=function(x) {
-  targ.indices <- x$DATE <= as.Date(gsub("2015", year(x$begin.season.date[1]), as.character(Sys.Date()))) & 
+  targ.indices <- x$DATE <= as.Date(gsub("2015", year(x$begin.season.date[1]), as.character(current.date))) & 
     x$DATE >=  x$begin.season.date # as.Date(paste0(year(x$begin.season.date), ""), format="%Y-%m-%d")
 #   targ.temps <- x$t.mean[targ.indices]
     targ.temps <- x$t.mean[targ.indices]
@@ -321,10 +321,16 @@ summary(todays.best.gam <- gam(days.to.closure ~ s(season) + enso.1 + enso.2 + e
 
 #summary(todays.best.gam <- gam(days.to.closure ~ s(season) + s(I( enso.8 + enso.9 + enso.10)) + s(I( nao.8 + nao.9 + nao.10)) + s(FDD.to.today) + s(DD.to.today), data=closure.dates.df.4, family=poisson ))
 
-summary(todays.best.gam <- gam(days.to.closure ~ s(season) + te(I( enso.8 + enso.9 + enso.10), I( nao.8 + nao.9 + nao.10)) + s(FDD.to.today) + s(DD.to.today), data=closure.dates.df.4, family=poisson ))
+summary(todays.best.gam <- gam(days.to.closure ~ s(season) + te(I(enso.11), I(   nao.11)) + s(FDD.to.today) + s(DD.to.today), data=closure.dates.df.4, family=poisson ))
 
-summary(todays.best.gam <- gam(days.to.closure ~ s(season)  + s(DD.to.today), data=closure.dates.df.4, family=poisson ))
+# summary(todays.best.gam <- gam(days.to.closure ~ s(season)  + s(DD.to.today), data=closure.dates.df.4, family=poisson ))
 
+best.lm <- lm(days.to.closure ~ season + I(enso.11)*I(nao.11) + FDD.to.today + DD.to.today, closure.dates.df.4)
+
+summary(best.lm )
+
+# enso.8*0.25 + enso.9*0.5 + enso.10*0.75 + nao.10*0.75 +
+#   nao.8*0.25 + nao.9*0.5 +
 
 # enso.1 + enso.2 + enso.3 + enso.4 + enso.5 + enso.6 + enso.7
 # nao.4 + nao.5 + nao.6 + nao.7 +
@@ -338,7 +344,8 @@ summary(todays.best.gam <- gam(days.to.closure ~ s(season)  + s(DD.to.today), da
 #           s(nao.6) + s(nao.7) + s(FDD.to.today) + s(DD.to.today), data=closure.dates.df.4, family=poisson ))
 
 
-
+# todays.best.gam
+# best.lm
 predicted.day.2016 <- predict(todays.best.gam, newdata=closure.dates.df.4[closure.dates.df.4$season==2016, ], type="response", se.fit=TRUE)
 predicted.days <- predict(todays.best.gam, type="response")
 mean(predicted.days)
