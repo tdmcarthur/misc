@@ -25,7 +25,7 @@ uw.df <- read.csv("/Users/travismcarthur/Desktop/TAA work/UW marginal product/UW
 # FTE total of all GPR-funded, Activity 2 (instructional) splits within department of tenure/tenure-track faculty titles.
 
 # TA_GPR
-#FTE total of all GPR-funded splits within department for teaching assistant titles (titles beginning with Y30, Y32 or Y33). 
+#FTE total of all GPR-funded splits within department for teaching assistant titles (titles beginning with Y30, Y32 or Y33).
 
 
 # Add support staff? - which lines to add?
@@ -68,6 +68,7 @@ uw.df <- read.csv("/Users/travismcarthur/Desktop/TAA work/UW marginal product/UW
 
 # Master's cost per student includes law students; doctoral cost per student excludes medical and veterinary students.
 # Source: http://legis.wisconsin.gov/lfb/publications/informational-papers/documents/2015/33_uw%20tuition.pdf
+# Live link: https://docs.legis.wisconsin.gov/misc/lfb/informational_papers/january_2015/0033_university_of_wisconsin_tuition_informational_paper_33.pdf
 
 # 13710 / 15
 # 23559 / 9
@@ -289,6 +290,188 @@ uw.df <- cbind(uw.df, model.matrix(credits ~  - 1 + Term , data=uw.df)[, -1, dro
 # uw.df[, c("ta.s", "faculty", "academ.staff")] <- uw.df[, c("ta.s", "faculty", "academ.staff")] * 10
 
 
+library("plm")
+library("lmtest")
+
+uw.df$term.year.numeric <- as.numeric(factor(uw.df$term.year))
+uw.df$year.numeric <- as.numeric(factor(uw.df$time))
+
+plm.for.pbg <- plm(credit.value ~ (ta.s + faculty + academ.staff + support.staff)^2 +
+      I(ta.s^2) + I(faculty^2) + I(academ.staff^2) + I(support.staff^2) + Term, 
+      data = uw.df, effect="twoways", 
+    model = "within", index=c("Department.Name", "term.year.numeric"))
+ 
+# panelmodel interface
+pbgtest(plm.for.pbg)
+pbgtest(plm.for.pbg, order = 4)
+
+coeftest(plm.for.pbg)
+coeftest(plm.for.pbg, vcov=vcovSCC)
+coeftest(plm.for.pbg, vcov=function(x) vcovSCC(x, type="sss"))
+
+
+coeftest(plm.for.pbg, vcov=function(x) vcovSCC(x, inner="white"))
+
+summary(coeftest(plm.for.pbg, vcov=vcovSCC)[, "Std. Error"] / coeftest(plm.for.pbg)[, "Std. Error"])
+
+coef(plm.for.pbg)[1:5]
+
+plm.for.pbg <- plm(credit.value ~ (ta.s + faculty + academ.staff + support.staff)^2 +
+      I(ta.s^2/2) + I(faculty^2/2) + I(academ.staff^2/2) + I(support.staff^2/2) + Term, 
+      data = uw.df, effect="twoways", 
+    model = "within", index=c("Department.Name", "term.year.numeric"))
+
+uw.df.plm <- plm.data(uw.df, indexes=c("Department.Name", "term.year.numeric"))
+
+quad.output.plm <- quadFuncEst( "credit.value", c("ta.s", "faculty", "academ.staff", "support.staff"), 
+  data=uw.df.plm, 
+#  shifterNames = colnames(uw.df)[grepl( "(Term)", colnames(uw.df) ) &
+#                                  (! colnames(uw.df) %in% c("Term") ) ],
+  effect="twoways", model = "within"
+)
+
+quad.output.plm.fixed <- quad.output.plm
+quad.output.plm.fixed$est
+coeftest.temp <- coeftest(quad.output.plm.fixed$est, vcov=vcovSCC)
+coeftest.temp
+coeftest(quad.output.plm.fixed$est, vcov=function(x) vcovSCC(x, maxlag=10))
+coeftest(quad.output.plm.fixed$est, vcov=vcovHC) 
+stopifnot(rownames(coeftest.temp) == names(quad.output.plm.fixed$coef)[-1])
+# getting rid of the first element of the coef since it is the intercept
+# quad.output.plm.fixed$coef[-1] <- coeftest.temp[, "Estimate"]
+
+quad.output.plm.fixed$coefCov[-1, -1] <-  vcovSCC(quad.output.plm.fixed$est, inner="white") # vcovHC(quad.output.plm.fixed$est) 
+quad.output.plm.fixed$est$vcov <- vcovSCC(quad.output.plm.fixed$est, inner="white") # vcovHC(quad.output.plm.fixed$est)  # vcovSCC(quad.output.plm.fixed$est)
+# about this correction: https://stat.ethz.ch/pipermail/r-help/2010-October/256407.html
+
+
+library("stargazer")
+
+
+stargazer(uw.df[, c("credit.value", "ta.s", "faculty", "academ.staff", "support.staff")], 
+          align = TRUE, digits = 1,
+          title = "Summary statistics of the data",
+          out ="/Users/travismcarthur/Desktop/TAA work/UW marginal product/memo/variable-summary-stats.tex")
+
+
+
+
+stargazer(quad.output.plm.fixed$est, single.row = TRUE, align = TRUE, dep.var.labels.include = FALSE,
+          dep.var.caption = "",
+          title = "Estimates of production function parameters",
+          notes = "Newey-West standard errors in parentheses",
+          out ="/Users/travismcarthur/Desktop/TAA work/UW marginal product/memo/plm-model-est-raw.tex")
+
+
+mp.plm.fixed <- quadFuncDeriv( xNames = c("ta.s", "faculty", "academ.staff", "support.staff"),
+          data=sapply(uw.df[uw.df$time=="X_2015", !sapply(uw.df, FUN=is.character)], FUN=mean, na.rm=TRUE), 
+          coef=coef( quad.output.plm.fixed ), coefCov = quad.output.plm.fixed$coefCov )
+
+mp.plm <- quadFuncDeriv( xNames = c("ta.s", "faculty", "academ.staff", "support.staff"),
+          data=sapply(uw.df[uw.df$time=="X_2015", !sapply(uw.df, FUN=is.character)], FUN=mean, na.rm=TRUE), 
+          coef=coef( quad.output.plm ), coefCov = quad.output.plm$coefCov )
+
+
+attributes( mp.plm )$stdDev
+attributes( mp.plm.fixed )$stdDev
+
+mp.plm.fixed / attributes( mp.plm.fixed )$stdDev
+
+
+mp.table <- data.frame(param=unlist(mp.plm.fixed), 
+           st.err=unlist(attr(mp.plm.fixed, "stdDev") ))
+
+colnames(mp.table) <- c("Estimated value", "Standard error")
+rownames(mp.table) <- c("TA", "Faculty", "Academic staff", "Support staff")
+
+stargazer(round(mp.table), align = TRUE, summary = FALSE,
+          title = "Estimated marginal value product of each labor input per semester", 
+          notes = c("Newey-West standard errors", 
+                    "Marginal product evaluated at the mean of the variables in the 2014-2015 academic year"),
+          out ="/Users/travismcarthur/Desktop/TAA work/UW marginal product/memo/plm-model-mp.tex")
+
+total.credit.value.2015 <- sum(uw.df[uw.df$time=="X_2015", "credit.value"])
+# This is the same as the quadFuncCalc, since the regression should exactly predict the mean anyway.
+
+no.labor.counterfactual <- function(labor.component, coef, perc=FALSE, data) {
+
+  data[, labor.component] <- 0
+
+  total.credit.value.2015.no.labor.component <- sum(
+    quadFuncCalc( xNames = c("ta.s", "faculty", "academ.staff", "support.staff"), 
+                  data=data, coef=coef
+  ))
+  if (!perc) {
+    return(total.credit.value.2015.no.labor.component)
+  } else {
+    return(1 - total.credit.value.2015.no.labor.component / total.credit.value.2015)
+  }
+  
+}
+
+total.credit.value.2015.no.tas <- no.labor.counterfactual("ta.s", 
+                                  coef( quad.output.plm.fixed ), data=uw.df[uw.df$time=="X_2015", ])
+
+total.credit.value.2015.no.tas.perc <- no.labor.counterfactual("ta.s", 
+                                  coef( quad.output.plm.fixed ), perc=TRUE, data=uw.df[uw.df$time=="X_2015", ])
+
+1 - total.credit.value.2015.no.tas / total.credit.value.2015
+prettyNum( total.credit.value.2015 - total.credit.value.2015.no.tas, big.mark="," )
+
+no.labor.counterfactual("ta.s", coef( quad.output.plm.fixed ), data=uw.df[uw.df$time=="X_2015", ])
+
+# Thanks to http://stats.stackexchange.com/questions/122066/how-to-use-delta-method-for-standard-errors-of-marginal-effects
+
+require(numDeriv) # Load numerical derivative package
+
+grad_g <-  jacobian(no.labor.counterfactual, coef(quad.output.plm.fixed),
+                    labor.component = "ta.s", 
+                    data=uw.df[uw.df$time=="X_2015", ]) 
+# Jacobian gives dimensions, otherwise same as gradient 
+
+#grad_g <-  jacobian(no.labor.counterfactual.nested, coef(test.nls.lm.12), labor.component="ta.s", data=uw.df[uw.df$time=="X_2015", ])
+
+# [uw.df$time=="X_2015", !sapply(uw.df, FUN=is.character)]
+quad.output.plm.fixed$coefCov[is.na(quad.output.plm.fixed$coefCov)] <- 0
+# A bit of fudging here to eliminate the zeros in the var-covar associated with the intercept
+
+total.credit.value.2015.no.tas.SE <- diag(sqrt(grad_g %*% quad.output.plm.fixed$coefCov %*% t(grad_g))) 
+
+
+grad_g <-  jacobian(no.labor.counterfactual, coef(quad.output.plm.fixed),
+                    labor.component = "ta.s", 
+                    perc=TRUE,
+                    data=uw.df[uw.df$time=="X_2015", ]) 
+quad.output.plm.fixed$coefCov[is.na(quad.output.plm.fixed$coefCov)] <- 0
+total.credit.value.2015.no.tas.perc.SE <- diag(sqrt(grad_g %*% quad.output.plm.fixed$coefCov %*% t(grad_g))) 
+
+
+no.tas.counterfact.df <- data.frame(value = 
+                      c( prettyNum( total.credit.value.2015 - total.credit.value.2015.no.tas, big.mark="," ),
+                   paste0(round(total.credit.value.2015.no.tas.perc*100, 1), "%") ), 
+           st.err = c(prettyNum(total.credit.value.2015.no.tas.SE, big.mark="," ),
+                   paste0(round(total.credit.value.2015.no.tas.perc.SE*100, 1), "%") ) )
+
+
+rownames(no.tas.counterfact.df ) <- c("Dollar value", "As percent of all credit revenue")
+colnames(no.tas.counterfact.df ) <- c("Estimated value", "Standard error")
+
+stargazer(no.tas.counterfact.df, summary = FALSE,
+          title = "Estimate of total contribution of TA labor to credit revenue, 2014-2015 academic year",
+          notes = "Newey-West standard errors",
+          out ="/Users/travismcarthur/Desktop/TAA work/UW marginal product/memo/plm-model-no-tas.tex")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -298,6 +481,9 @@ quad.output <- quadFuncEst( "credit.value", c("ta.s", "faculty", "academ.staff",
   shifterNames = colnames(uw.df)[grepl( "(Department.Name)|(Term)|(time)", colnames(uw.df) ) &
                                   (! colnames(uw.df) %in% c("Department.Name", "Term", "time") ) ]
 )
+
+
+
 
 library("plm")
 
