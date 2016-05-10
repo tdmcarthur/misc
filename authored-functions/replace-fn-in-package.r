@@ -12,17 +12,20 @@ replace.fn.in.package.Rcpp <- function(fn.to.replace, replacement.fn, pkg) {
     unlockBinding(fn.to.replace, as.environment(paste0("package:", pkg)))
   }
   
-  assign(fn.to.replace, get(replacement.fn, envir = parent.frame()), 
+  # Changed from parent.frame() to .GlobalEnv
+  assign(fn.to.replace, get(replacement.fn, envir = .GlobalEnv), 
     as.environment(paste0("package:", pkg)))
   # Assign in package
-  assignInNamespace(fn.to.replace, get(replacement.fn, envir = parent.frame()), 
+  assignInNamespace(fn.to.replace, get(replacement.fn, envir = .GlobalEnv), 
       ns=asNamespace(pkg), envir=as.environment(paste0("package:", pkg)))
   # Assign in namespace, to make sure we really get it
-  rm(list=replacement.fn, pos=parent.frame())
+  rm(list=replacement.fn, pos=.GlobalEnv)
   print( getAnywhere(fn.to.replace) ) 
   # To make sure it worked properly
   invisible(NULL)
 }
+
+# The replacement.fn must be in the global environment
 
 
 
@@ -31,6 +34,7 @@ replace.fn.in.package.Rcpp <- function(fn.to.replace, replacement.fn, pkg) {
 # Example usage below
 
 do.example <- FALSE
+# do.example <- TRUE
 
 if (do.example) {
 
